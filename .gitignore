@@ -1,0 +1,6 @@
+# --- Python ---
+__pycache__/
+torch_env
+project/__pycache__
+project/Phi-3-mini-4k-instruct
+project/Phi-3-mini-4k-instruct-gguf

@@ -1,0 +1,16 @@
+wsl 2 :  ubunut 24.04.1 LTS !!!
+python 3.10
+pytorch : 2.10 ! 
+
+# To activate this environment, use
+#
+#     $ conda activate conda_torch_xpu_env
+#
+# To deactivate an active environment, use
+#
+#     $ conda deactivate
+ il faut passer par directML  et py torch 2.10
+ 
+il faut egalement  telechargé la lib via je github pour les dep level_zero -> NB:  tres chiant via les fichier deb bien sui https://github.com/oneapi-src/level-zero et https://github.com/intel/compute-runtime
+ 
+ cd /mnt/c/Users/come_/Desktop/ia-llm/phi3

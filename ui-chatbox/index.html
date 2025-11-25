@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Chat IA avec Instructions</title>
+<style>
+    body { font-family: Arial; background: #f2f2f2; display: flex; flex-direction: column; align-items: center; padding-top: 40px; }
+    #tabs { display: flex; margin-bottom: 10px; }
+    .tab { padding: 10px 20px; border-radius: 6px 6px 0 0; cursor: pointer; background: #ccc; margin-right: 2px; }
+    .tab.active { background: #0078ff; color: white; }
+    #chatbox, #instructionBox { width: 400px; height: 400px; background: #fff; border-radius: 10px; box-shadow: 0 0 10px #ccc; padding: 15px; overflow-y: auto; }
+    #instructionBox  { display: none; }
+	#chatbox { display: block; }
+	.msg { padding: 8px 12px; border-radius: 6px; margin: 6px 0; max-width: 80%; line-height: 1.4; }
+    .user { background: #0078ff; color: white; margin-left: auto; text-align: right; }
+    .ai { background: #eaeaea; color: #333; margin-right: auto; }
+    #inputArea, #instructionInputArea { display: flex; width: 400px; margin-top: 10px; }
+    textarea { flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #ccc; resize: vertical; font-family: Arial; }
+    #sendBtn, #sendInstrBtn { margin-left: 10px; padding: 10px 15px; border: none; background: #0078ff; color: white; border-radius: 6px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div id="tabs">
+    <div class="tab active" id="chatTab">Chat</div>
+    <div class="tab" id="instrTab">Instruction</div>
+</div>
+
+<div id="chatbox"></div>
+<div id="instructionBox"></div>
+
+<div id="inputArea">
+    <textarea id="message" placeholder="Rechercher prompt..." rows="3"></textarea>
+    <button id="sendBtn">Envoyer</button>
+</div>
+
+<div id="instructionInputArea" style="display:none;">
+    <textarea id="instruction_prompt" placeholder="Écrire un prompt..." rows="3"></textarea>
+	<textarea id="instruction_instruction" placeholder="Écrire les instruction..." rows="3"></textarea>
+    <button id="sendInstrBtn">Envoyer</button>
+</div>
+
+<script>
+// Gestion des onglets
+const chatTab = document.getElementById("chatTab");
+const instrTab = document.getElementById("instrTab");
+const chatbox = document.getElementById("chatbox");
+const instructionBox = document.getElementById("instructionBox");
+const inputArea = document.getElementById("inputArea");
+const instructionInputArea = document.getElementById("instructionInputArea");
+
+chatTab.addEventListener("click", () => {
+    chatTab.classList.add("active");
+    instrTab.classList.remove("active");
+    chatbox.style.display = "block";
+    instructionBox.style.display = "none";
+    inputArea.style.display = "flex";
+    instructionInputArea.style.display = "none";
+});
+
+instrTab.addEventListener("click", () => {
+    instrTab.classList.add("active");
+    chatTab.classList.remove("active");
+    chatbox.style.display = "none";
+    instructionBox.style.display = "block";
+    inputArea.style.display = "none";
+    instructionInputArea.style.display = "flex";
+});
+
+// Ajouter message dans un chatbox
+function addMessage(text, sender, box) {
+    const chat = box;
+    const div = document.createElement("div");
+    div.className = "msg " + sender;
+    div.textContent = text;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+// Envoi message Chat
+function sendMessage() {
+    const input = document.getElementById("message");
+    const userText = input.value.trim();
+    if (!userText) return;
+
+    addMessage(userText, "user", chatbox);
+    input.value = "";
+
+    fetch("http://localhost:11434/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            prompt: userText
+		})
+    })
+    .then(res => res.json())
+    .then(data => {
+        const botReply = data.reply;
+        const assistantText = botReply.split("ASSISTANT:")[1]?.trim() || botReply;
+        addMessage(assistantText, "ai", chatbox);
+    })
+    .catch(err => {
+        addMessage("Erreur : " + err, "ai", chatbox);
+    });
+}
+
+// Envoi Instruction
+function sendInstruction() {
+    const prompt = document.getElementById("instruction_prompt").value.trim();
+	const instruction = document.getElementById("instruction_instruction").value.trim();
+    if (!(prompt && instruction)) return;
+
+    addMessage(prompt+" , "+ instruction, "user", instructionBox);
+
+    fetch("http://localhost:11434/api/instruction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompt, instruction : instruction })
+    })
+    .then(res => res.json())
+    .then(data => {
+        addMessage(data.status, "ai", instructionBox);
+    })
+    .catch(err => {
+        addMessage("Erreur : " + err, "ai", instructionBox);
+    });
+}
+
+// Listeners
+document.getElementById("sendBtn").addEventListener("click", sendMessage);
+document.getElementById("message").addEventListener("keypress", e => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+document.getElementById("sendInstrBtn").addEventListener("click", sendInstruction);
+</script>
+
+</body>
+</html>
