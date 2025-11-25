@@ -1,0 +1,52 @@
+{"prompt": "Machine ABC001 température 72.5°C vibration 1.12",  "completion": "0: normal"}
+{"prompt": "Machine ABC002 température 88.4°C vibration 1.78",  "completion": "A3: température trop haute"}
+{"prompt": "Machine ABC003 température 69.2°C vibration 0.91",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 95.1°C vibration 1.54",  "completion": "A1: fuite huile"}
+{"prompt": "Machine ABC002 température 65.3°C vibration 1.03",  "completion": "0: normal"}
+{"prompt": "Machine ABC001 température 92.8°C vibration 1.68",  "completion": "A3: température trop haute"}
+{"prompt": "Machine ABC003 température 78.4°C vibration 0.87",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 85.2°C vibration 1.45",  "completion": "A2: vibration excessive"}
+{"prompt": "Machine ABC001 température 69.9°C vibration 0.95",  "completion": "0: normal"}
+{"prompt": "Machine ABC002 température 91.3°C vibration 1.72",  "completion": "A3: température trop haute"}
+{"prompt": "Machine ABC003 température 70.5°C vibration 1.05",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 87.1°C vibration 1.60",  "completion": "A4: pression anormale"}
+{"prompt": "Machine ABC001 température 68.7°C vibration 0.99",  "completion": "0: normal"}
+{"prompt": "Machine ABC002 température 93.4°C vibration 1.81",  "completion": "A3: température trop haute"}
+{"prompt": "Machine ABC003 température 71.2°C vibration 0.92",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 89.5°C vibration 1.50",  "completion": "A1: fuite huile"}
+{"prompt": "Machine ABC001 température 66.8°C vibration 1.01",  "completion": "0: normal"}
+{"prompt": "Machine ABC002 température 90.7°C vibration 1.75",  "completion": "A2: vibration excessive"}
+{"prompt": "Machine ABC003 température 73.1°C vibration 0.89",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 86.4°C vibration 1.47",  "completion": "A4: pression anormale"}
+{"prompt": "Machine ABC001 température 70.0°C vibration 1.00",  "completion": "0: normal"}
+{"prompt": "Machine ABC002 température 94.2°C vibration 1.80",  "completion": "A3: température trop haute"}
+{"prompt": "Machine ABC003 température 72.6°C vibration 0.95",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 88.3°C vibration 1.55",  "completion": "A1: fuite huile"}
+{"prompt": "Machine ABC001 température 69.5°C vibration 0.97",  "completion": "0: normal"}
+{"prompt": "Machine ABC002 température 91.9°C vibration 1.73",  "completion": "A2: vibration excessive"}
+{"prompt": "Machine ABC003 température 71.8°C vibration 0.93",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 87.6°C vibration 1.52",  "completion": "A4: pression anormale"}
+{"prompt": "Machine ABC001 température 68.4°C vibration 0.98",  "completion": "0: normal"}
+{"prompt": "Machine ABC002 température 92.5°C vibration 1.77",  "completion": "A3: température trop haute"}
+{"prompt": "Machine ABC003 température 70.9°C vibration 0.91",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 89.0°C vibration 1.58",  "completion": "A1: fuite huile"}
+{"prompt": "Machine ABC001 température 67.6°C vibration 1.02",  "completion": "0: normal"}
+{"prompt": "Machine ABC002 température 93.8°C vibration 1.79",  "completion": "A2: vibration excessive"}
+{"prompt": "Machine ABC003 température 72.3°C vibration 0.94",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 86.9°C vibration 1.49",  "completion": "A4: pression anormale"}
+{"prompt": "Machine ABC001 température 70.7°C vibration 1.01",  "completion": "0: normal"}
+{"prompt": "Machine ABC002 température 95.0°C vibration 1.82",  "completion": "A3: température trop haute"}
+{"prompt": "Machine ABC003 température 71.5°C vibration 0.96",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 88.7°C vibration 1.57",  "completion": "A1: fuite huile"}
+{"prompt": "Machine ABC001 température 69.1°C vibration 0.99",  "completion": "0: normal"}
+{"prompt": "Machine ABC002 température 92.3°C vibration 1.74",  "completion": "A2: vibration excessive"}
+{"prompt": "Machine ABC003 température 70.8°C vibration 0.92",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 87.3°C vibration 1.53",  "completion": "A4: pression anormale"}
+{"prompt": "Machine ABC001 température 68.9°C vibration 1.00",  "completion": "0: normal"}
+{"prompt": "Machine ABC002 température 94.6°C vibration 1.81",  "completion": "A3: température trop haute"}
+{"prompt": "Machine ABC003 température 72.0°C vibration 0.95",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 88.9°C vibration 1.56",  "completion": "A1: fuite huile"}
+{"prompt": "Machine ABC001 température 69.7°C vibration 0.98",  "completion": "0: normal"}
+{"prompt": "Machine ABC002 température 91.6°C vibration 1.76",  "completion": "A2: vibration excessive"}
+{"prompt": "Machine ABC003 température 71.9°C vibration 0.94",  "completion": "0: normal"}
+{"prompt": "Machine ABC004 température 86.7°C vibration 1.51",  "completion": "A4: pression anormale"}
