@@ -23,5 +23,10 @@ class BaseConfig(object):
     MAX_LENGTH = 512
 
     OUTPUT_DIR = "./lora_model"
+    
+    ####### RAG #######
+    RAG_MODEL = "./models/all-MiniLM-L6-v2" # pour le embeded
+    RAG_ARCHIVE_PATH = "./RAG/archive"    
+    INDEX_FAISS = "./models/FAISS/"
 
 Config = BaseConfig

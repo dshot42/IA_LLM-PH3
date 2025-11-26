@@ -2,54 +2,38 @@
 Execute download_repo.bat : git clone the llm model of phi3 from hugging face (no token required)
 
 Set  envirronement 
-
-wsl 2 :  ubunut 24.04.1 LTS !!!
-install Conda (miniconda)
 install python 3.10
-active conda environnement 
 
-set install this dep versions
+install VINO
+python -m venv vino
+.\vino\Scripts\Activate.ps1
+
+set install this dep versions (CPU only car architecture non cuda dans mon cas de mon intel arc dédié (XPU)
 -----------------------------------------------------
 pip list | grep torch : |
 -------------------------
-pytorch-triton           3.5.1+gitbfeb0668
-torch                    2.4.1
-torch-directml           0.2.5.dev240914
-torchaudio               2.10.0.dev20251122+cu128
-torchvision              0.19.1
+directML		    
+// impossible de faire marcher le support pour mon XPU car gestion des packages 4bytes (quantization) non natif comme sur CUDA
+torch                       2.1.1
+torchaudio                  2.1.1
+torchvision                 0.16.1
 -----------------------------------------------------
 
- 
-il faut egalement  telechargé la lib via je github pour les dep level_zero -> NB:  tres chiant via les fichier deb bien sui https://github.com/oneapi-src/level-zero et https://github.com/intel/compute-runtime
- 
-/!\  checker que les dépendances existent bien !
------------------------------------------------------
-> ldconfig -p | grep libze_loader
-        libze_loader.so (libc6,x86-64) => /usr/local/lib/libze_loader.so
------------------------------------------------------
+set VINO ENV : 
+> execute_vino.bat -> .\vino\Scripts\Activate.ps1
 
-NB : l'installation est extrêmement complexe sans architecture GPU - CUDA (Intel type GTX/RTX)
-Le deep Learning sur CPU est totalement impraticable (1 min pour un dataset simple)
-Il faut impérativement utilisé le XPU (Intel arc dédié : Arrow lake arch dans mon cas) et c'est un véritable enfer par manque de support sous py torch, IPEX non implémenté pour architecture Arrow lake ! 
-il faut donc passé par des couche basse(level-zero) et arrivé à binder en tatonnant les versions compatibles avec torch-directml pour que le XPU soit reconnu comme cuda (simulé) (quasiment aucune source hors depot GitHub intel)
-
-
-
-# To activate this environment, use
-#
-#     $ conda activate conda_torch_xpu_env
-#
-# To deactivate an active environment, use
-#
-#     $ conda deactivate
-
-set project path on Ubuntu : 
-> cd /mnt/c/Users/come_/Desktop/ia-llm/phi3
+*** Required ***
+pip install --upgrade pip
+pip install torch torchvision torchaudio
+pip install sentence-transformers faiss-cpu
 
 ######	LAUNCHER ######
 
 > cd project 
-> python server.py 
+> python server.py // launch the server for web request (prompt)
+> python main.py // launch le deep learning Lora en fine turne (tres long sur CPU)
+> python launch_rag.py // va faire des chunks avec faiss pour recherche rapide et prioritaire sans réétrainer le mode 
+// mettre les archive a persister dans : project/RAG/archive (script recursif)
 
 ######	FRONT - CHAT BOX IA ######
 

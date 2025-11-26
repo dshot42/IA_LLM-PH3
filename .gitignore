@@ -4,5 +4,4 @@ torch_env
 project/__pycache__
 project/models/*
 project/lora_model
-project/qwen_model
 token.txt

@@ -1,0 +1,82 @@
+########### PROCEDURE INSTALLATION PYTHON OpenVINO LLAMA ET LORA ###########
+
+# CMD terminal 
+
+download : https://www.python.org/downloads/release/pymanager-250/
+
+#launch python manager 
+
+#[Y] install py envirronement variable  pour commande py 
+
+>py install 3.11.6
+
+>python --version -> ok 
+
+
+# PowerShell : 
+
+>python -m venv ia 
+
+>Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+.\ia\Scripts\Activate.ps1
+
+#Permet de launcher Activate.ps1
+
+#Après activation, l’invite doit afficher : (ia) C:\Users\come_>
+
+> setx PATH "%PATH%;C:\Program Files\PyManager\Scripts"
+
+
+
+
+1️⃣ Installer OpenVINO (Intel CPU + GPU ARC)
+
+# Step 1: Create virtual environment
+python -m venv openvino_env
+# Step 2: Activate virtual environment
+openvino_env\Scripts\activate
+# Step 3: Upgrade pip to latest version
+python -m pip install --upgrade pip
+# Step 4: Download and install the package
+pip install openvino==2025.3.0
+> python .\test_vino.py ->  ['CPU', 'GPU', 'NPU'] // il faut absoluement le GPU pour exploiter la puissance de calcule asynchrone du reseau neuronal
+
+
+2️⃣ Installer PyTorch optimisé pour Intel ARC
+
+
+// pip install torch-directml -> trop vieux 
+
+pip uninstall torch torchvision torchaudio -y
+
+pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
+  intel-extension-for-pytorch==2.8.0 -f https://pytorch-extension.intel.com/whl/cpu/xpu
+
+# NB : driver GPU doivent etre a jour pour pytorch + Install Microsoft Visual C++ Redistributable (LTS)
+(dans mon as LTS Arrow Lake pour support pytorch)  : https://pytorch-extension.intel.com/installation?platform=gpu&version=v2.6.10%2Bxpu&os=windows&package=pip
+visuale studio installer -> installation de bureau C++ sinon on a pas les compilateur C ! ! ! 
+Puis installer Zero avec oneApi pour mon intell arc 
+
+
+Pour ton Intel® Arc GPU, tu dois utiliser la version Intel oneAPI Base & HPC Toolkits qui inclut Level Zero et le compilateur DPC++/C++ compatible GPU.
+
+Détails :
+
+OneAPI Base Toolkit ✅
+
+Contient le runtime Level Zero, nécessaire pour les Intel GPUs (Arc inclus).
+
+Contient le DPC++/C++ compiler, OpenCL, SYCL et les drivers pour GPU.
+
+Inclut les librairies essentielles pour PyTorch avec Intel Extension (XPU).
+
+# NB : je dispose d'un GPU intel ARC dédié (CPU : Ultra 7 255H), si une GPU type RTX est mis en place, la version py-torch ne sera pas la meme ! ! ! 
+
+NB : il faut a chaque fois launcher le activate pour module ia pour executer du py torch  ! 
+
+
+
+
+python -c "import torch; print(torch.__version__); print(torch.xpu.is_available())"
+
+
