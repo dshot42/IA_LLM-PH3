@@ -41,6 +41,13 @@ def load_model_with_lora(load_in_4bit=True, load_in_8bit=False):
 
     return model
 
+def load_standard_model(load_in_4bit=True, load_in_8bit=False, double_quant=True, compute_dtype="float16", quant_type="nf4"):
+    model = AutoModelForCausalLM.from_pretrained(
+        Config.MODEL_NAME,
+        device_map="auto"    
+    )
+    return model
+
 
 def load_model_with_qlora(load_in_4bit=True, load_in_8bit=False, double_quant=True, compute_dtype="float16", quant_type="nf4"):
     bnb_config = BitsAndBytesConfig(

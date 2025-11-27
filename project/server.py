@@ -19,17 +19,23 @@ def generate():
     response_text = eval.faiss_search(prompt, model, tokenizer)
     return jsonify({"reply": response_text})
 
+@app.route("/api/prompt/image", methods=["POST"])
+def image():
+    data = request.get_json()
+    prompt = data.get("prompt", "")
+    if prompt.startswith("data:image"):
+        prompt = prompt.split(",")[1]
+
+    response_text = eval.prompt_image(prompt, model, tokenizer)
+    return jsonify({"reply": response_text})
+
 # === Main ===
 if __name__ == "__main__":
     # === Charger le tokenizer et le modèle une seule fois ===
     print(" --- Loading Models...")
     tokenizer = model_utils.load_tokenizer()
-    model = model_utils.load_model_with_qlora()
-    '''
-    model = AutoModelForCausalLM.from_pretrained(
-        Config.MODEL_NAME,
-        device_map="auto"    )
-    '''
+    #model = model_utils.load_model_with_qlora()
+    model = model_utils.load_standard_model()
     print(" --- Model with QLoRA Loaded ...")
     # === Lancer le serveur Flask ===
     app.run(host="127.0.0.1", port=11434)

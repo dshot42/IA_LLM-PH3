@@ -19,6 +19,7 @@ import time
 
 
 def scrap_web_ressource():
+    print ("Load web archive where url in ./RAG/web_ressources/")
     urls = []
     # 1. Charger toutes les URLs depuis les fichiers JSON
     for file in os.listdir(Config.RAG_WEB_ARCHIVE_PATH):
@@ -87,11 +88,7 @@ def scrap_web_ressource():
 
     print(f"Nombre total de documents: {len(documents)}")
     print(f"Nombre total de chunks: {len(all_chunks)}")
-
     return  all_chunks, metadata
-
-
-
 
 
 
@@ -105,6 +102,7 @@ def split_text(text, chunk_size=Config.CHUNK_SIZE, overlap=100):
     return chunks
 
 def chunkDocuments():
+    print ("Load local archive in folder ./RAG/archive/")
     all_chunks = []
     metadata = []
     for root, dirs, files in os.walk(Config.RAG_ARCHIVE_PATH):
