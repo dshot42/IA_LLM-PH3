@@ -39,8 +39,9 @@ def save_faiss_index(index, chunks, metadata):
     with open(META_FILE, "wb") as f:
         pickle.dump({"chunks": chunks, "metadata": metadata}, f)
 
-    doc_names = [m.get("file_path", "inconnu") for m in metadata]
+    doc_names = [m.get("path", "inconnu") for m in metadata]
     print("✅ Index FAISS et métadonnées sauvegardés pour les documents :", ", ".join(doc_names))
+    print("--------------------------")
 
 
 def build_faiss_index(chunks, metadata):
@@ -70,30 +71,26 @@ def faiss_index_handler(new_chunks, new_metadata):
     """
     chunks, metadata, embedder, index = load_faiss_index()
 
-    if chunks is None:
-        chunks, metadata = [], []
-        embedder = SentenceTransformer(Config.RAG_MODEL)
-        index = None
+    # Si aucun index existant, on le crée directement
+    if chunks is None or metadata is None or index is None:
+        print("⚠️ Création d'un nouvel index FAISS pour les nouveaux documents...")
+        embedder, index = build_faiss_index(new_chunks, new_metadata)
+        return new_chunks, new_metadata, embedder, index  # <-- Retourne bien 4 valeurs
 
-    # Détecter les nouveaux documents par filename pour éviter les doublons
+    # Détecter les nouveaux documents pour éviter les doublons
     new_entries = []
-    existing_filenames = [m.get("file_path") for m in metadata]
+    existing_filenames = [m.get("path") for m in metadata]
     for chunk, meta in zip(new_chunks, new_metadata):
-        if meta.get("file_path") not in existing_filenames:
+        if meta.get("path") not in existing_filenames:
             new_entries.append((chunk, meta))
 
     if not new_entries:
         print("ℹ️ Aucun nouveau document à ajouter.")
         return chunks, metadata, embedder, index
 
-    # Ajouter les nouveaux chunks
+    # Ajouter les embeddings des nouveaux chunks
     chunks_to_add, metadata_to_add = zip(*new_entries)
     embeddings_to_add = embedder.encode(list(chunks_to_add), convert_to_numpy=True)
-
-    if index is None:
-        dimension = embeddings_to_add.shape[1]
-        index = faiss.IndexFlatL2(dimension)
-
     index.add(embeddings_to_add)
 
     # Mettre à jour les listes
@@ -109,13 +106,30 @@ def faiss_index_handler(new_chunks, new_metadata):
 def retrieve(query, embedder, index, chunks, metadata, top_k=5):
     """
     Recherche les top_k chunks les plus proches d'une query.
+    Version sécurisée pour éviter les erreurs.
     """
-    query_vector = embedder.encode([query])
+    if index is None or index.ntotal == 0:
+        print("⚠️ L'index FAISS est vide.")
+        return []
+
+    if not chunks or not metadata:
+        print("⚠️ Les chunks ou metadata sont vides.")
+        return []
+
+    # Assurer que top_k ne dépasse pas le nombre de vecteurs
+    top_k = min(top_k, index.ntotal)
+
+    query_vector = embedder.encode([query], convert_to_numpy=True)
     distances, indices = index.search(query_vector, top_k)
+
     results = []
     for idx in indices[0]:
-        results.append({
-            "text": chunks[idx],
-            "metadata": metadata[idx]
-        })
+        if idx < len(chunks):
+            results.append({
+                "text": chunks[idx],
+                "metadata": metadata[idx]
+            })
+        else:
+            print(f"⚠️ Index FAISS {idx} hors limites pour chunks (len={len(chunks)})")
+
     return results

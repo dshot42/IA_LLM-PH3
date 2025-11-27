@@ -10,7 +10,7 @@ python -m venv vino
 
 set install this dep versions (CPU only car architecture non cuda dans mon cas de mon intel arc dédié (XPU)
 -----------------------------------------------------
-pip list | grep torch : |
+pip list | findstr torch : |
 -------------------------
 directML		    
 // impossible de faire marcher le support pour mon XPU car gestion des packages 4bytes (quantization) non natif comme sur CUDA
@@ -26,6 +26,9 @@ set VINO ENV :
 pip install --upgrade pip
 pip install torch torchvision torchaudio
 pip install sentence-transformers faiss-cpu
+pip install llama-index tavily-python
+
+>launch download_repo.bat // pour télécharger les models requis, il faut changer le config.py avec le nom exacte du model a utiliser (model llama obligatoire)
 
 ######	LAUNCHER ######
 

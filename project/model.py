@@ -1,7 +1,6 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import LoraConfig, get_peft_model
 from config import Config
-import torch_directml
 import torch
 
 def load_tokenizer():
@@ -42,6 +41,7 @@ def load_model_with_lora(load_in_4bit=True, load_in_8bit=False):
 
     return model
 
+
 def load_model_with_qlora(load_in_4bit=True, load_in_8bit=False, double_quant=True, compute_dtype="float16", quant_type="nf4"):
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=load_in_4bit,
@@ -56,6 +56,7 @@ def load_model_with_qlora(load_in_4bit=True, load_in_8bit=False, double_quant=Tr
         device_map="auto",
         quantization_config=bnb_config
     )
+    #model = AutoModelForCausalLM.from_pretrained(Config.MODEL_NAME).to("cpu")
 
     lora_config = LoraConfig(
         r=Config.LORA_R,
@@ -71,6 +72,7 @@ def load_model_with_qlora(load_in_4bit=True, load_in_8bit=False, double_quant=Tr
 
     return model
 
+'''
 def load_model_directml():
     dml = torch_directml.device()
 
@@ -81,3 +83,4 @@ def load_model_directml():
     )
 
     return model.to(dml)
+'''

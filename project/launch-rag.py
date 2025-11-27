@@ -1,7 +1,5 @@
 import sys
 import os
-import pickle
-import faiss
 import numpy as np
 from PyPDF2 import PdfReader
 from docx import Document
@@ -12,10 +10,92 @@ from config import Config
 import eval  # prompter
 import model as model_utils
 import faiss_handler
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
+
+import json
+import requests
+import time
+
+
+def scrap_web_ressource():
+    urls = []
+    # 1. Charger toutes les URLs depuis les fichiers JSON
+    for file in os.listdir(Config.RAG_WEB_ARCHIVE_PATH):
+        if file.endswith(".json"):
+            path = os.path.join(Config.RAG_WEB_ARCHIVE_PATH, file)
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                urls.extend(data.get("urls", []))
+
+    print(f"Total URLs racines chargées: {len(urls)}")
+
+    documents = []
+    all_chunks = []
+    metadata = []
+
+    # 2. Pour chaque URL racine, lancer un petit crawler
+    for start_url in urls:
+        visited = set()
+        to_visit = [start_url]
+
+        while to_visit and len(visited) < 10:  # continue tant qu'il reste des pages à visiter
+        #while to_visit # scrap jusqu'a la derniere page de l'aboressence
+            url = to_visit.pop(0)
+            if url in visited:
+                continue
+            visited.add(url)
+
+            try:
+                response = requests.get(url, timeout=10)
+                if response.status_code != 200:
+                    continue
+
+                soup = BeautifulSoup(response.text, "html.parser")
+                text = soup.get_text(separator=" ", strip=True)
+
+                # Découpage en chunks
+                for i in range(0, len(text), Config.CHUNK_SIZE):
+                    chunk = text[i:i+Config.CHUNK_SIZE]
+                    all_chunks.append(chunk)
+                    metadata.append({
+                        "type":"web",
+                        "path": url,
+                        "source": start_url,
+                        "parent": start_url,
+                        "page": (i // Config.CHUNK_SIZE) + 1,
+                        "chunk_id": i // Config.CHUNK_SIZE
+                    })
+
+                documents.append({"url": url, "text": text})
+                print("ADD : "+url)
+                if (i == 10): # on break apres 10 page
+                    break 
+
+
+                # Ajouter les liens internes à visiter
+                for link in soup.find_all("a", href=True):
+                    new_url = urljoin(url, link["href"])
+                    if urlparse(new_url).netloc == urlparse(start_url).netloc:
+                        if new_url not in visited:
+                            to_visit.append(new_url)
+
+                time.sleep(0.5)  # éviter de surcharger le site
+
+            except Exception as e:
+                print(f"Erreur sur {url}: {e}")
+
+    print(f"Nombre total de documents: {len(documents)}")
+    print(f"Nombre total de chunks: {len(all_chunks)}")
+
+    return  all_chunks, metadata
 
 
 
-def split_text(text, chunk_size=1000, overlap=100):
+
+
+
+def split_text(text, chunk_size=Config.CHUNK_SIZE, overlap=100):
     chunks = []
     start = 0
     while start < len(text):
@@ -40,6 +120,7 @@ def chunkDocuments():
                             for chunk in chunks:
                                 all_chunks.append(chunk)
                                 metadata.append({
+                                    "type":"doc",
                                     "source": filename,
                                     "path": file_path,
                                     "parent": root,
@@ -78,29 +159,20 @@ def chunkDocuments():
 
 
 if __name__ == "__main__":
-    all_chunks, metadata = chunkDocuments()
-    all_chunks, metadata, embedder, index = faiss_handler.faiss_index_handler(all_chunks, metadata)     
     
-    def faiss_search(query,all_chunks, metadata):
+    all_chunks, metadata = scrap_web_ressource()
+    all_chunks, metadata, embedder, index = faiss_handler.faiss_index_handler(all_chunks, metadata)  
+    
+    all_chunks, metadata = chunkDocuments()
+    all_chunks, metadata, embedder, index = faiss_handler.faiss_index_handler(all_chunks, metadata)  
+    
+    def faiss_search(): 
+        query = "donne moi le n° france travail de monsieur dubost en une réponse simple"
         tokenizer = model_utils.load_tokenizer()
-
-        print(" --- Loading model with QLoRA...")
         model = model_utils.load_model_with_qlora()
+        print(" --- Model with QLoRA Loaded ...")
         
-        if embedder and index and all_chunks:
-            retrieved = faiss_handler.retrieve(query, embedder, index, all_chunks, metadata)
-
-            # Construire le contexte
-            context = "\n\n".join([
-                f"{r['text']} (source: {r['metadata']['source']}, page: {r['metadata']['page']})"
-                for r in retrieved
-            ])
-
-            # Passer au prompter
-            response_text = eval.prompt_query(context, model, tokenizer)
-            print(response_text)
-        else:
-            print("⚠️ Aucun index disponible, impossible de faire la recherche.")
+        eval.faiss_search(query, model, tokenizer)
+        
             
-            
-    faiss_search(  query = "Quels sont les concepts clés du document '2965fe23-bb38-document-de-synthese-j00171777071-v1.pdf' ?",all_chunks=all_chunks, metadata=metadata)
+    faiss_search()
