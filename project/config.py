@@ -17,7 +17,7 @@ class BaseConfig(object):
     EPOCHS = 1
     BATCH_SIZE = 2
     LEARNING_RATE = 2e-5
-    MAX_OUTPUT_TOKEN = 300 # / 50 pour test uniquement
+    MAX_OUTPUT_TOKEN = 200 # / 50 pour test uniquement
     TOP_P = 0.9
     TEMPERATURE = 0.7
 

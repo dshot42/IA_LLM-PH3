@@ -44,7 +44,7 @@ def prompt_image(image64,model,tokenizer):
     
     query = f"Analyse cette image : {image_description}. réponse en français"
     response_text = prompt_query(query, model, tokenizer)
-    print(response_text)
+    return response_text
     
       
 def faiss_search(query, model, tokenizer, threshold=0.7):
