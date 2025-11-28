@@ -39,3 +39,4 @@ def train(model, tokenizer, dataset):
 
     trainer.train()
     trainer.save_model(Config.OUTPUT_DIR)
+    

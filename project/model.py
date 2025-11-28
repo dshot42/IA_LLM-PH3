@@ -75,7 +75,10 @@ def load_model_with_qlora(load_in_4bit=True, load_in_8bit=False, double_quant=Tr
     )
 
     model = get_peft_model(model, lora_config)
+
+    # 3) Maintenant tu peux
     model.print_trainable_parameters()
+
 
     return model
 

@@ -20,7 +20,19 @@ class BaseConfig(object):
     MAX_OUTPUT_TOKEN = 200 # / 50 pour test uniquement
     TOP_P = 0.9
     TEMPERATURE = 0.7
-
+    TOP_K=40
+    
+    ''' POUR RAG
+    TOP_P =0.85
+    TEMPERATURE = 0.2 # plus pertinant en RAG
+    TOP_K=40
+    
+    default 
+    TOP_P = 0.9
+    TEMPERATURE = 0.7
+    TOP_K=40
+ 
+    '''
     MAX_LENGTH = 512
 
     OUTPUT_DIR = "./models/lora/phi3-lora"

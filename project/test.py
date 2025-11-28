@@ -13,11 +13,14 @@ query = "donne moi le n° france travail de monsieur dubost en une réponse simp
 all_chunks, metadata, embedder, index = faiss_handler.load_faiss_index()
 
 if embedder and index and all_chunks:
-    retrieved = faiss_handler.retrieve(query, embedder, index, all_chunks, metadata)
+       retrieved = faiss_handler.retrieve(
+        top_k=2, # ici le nombre de result
+        min_score=threshold
+    )
 
     context = "\n\n".join([
         f"Texte: {r['text'][:1000]}...\nChemin: {r['metadata'].get('path','inconnu')}\nSource: {r['metadata'].get('source','inconnu')}\nPage: {r['metadata'].get('page','?')}"
-        for r in retrieved[:5] 
+        for r in retrieved[:2] #5 a 10 avec le 7B
     ])
 
     prompt = f"""

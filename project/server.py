@@ -35,7 +35,8 @@ if __name__ == "__main__":
     print(" --- Loading Models...")
     tokenizer = model_utils.load_tokenizer()
     #model = model_utils.load_model_with_qlora()
+
     model = model_utils.load_standard_model()
     print(" --- Model with QLoRA Loaded ...")
     # === Lancer le serveur Flask ===
-    app.run(host="127.0.0.1", port=11434)
+    app.run(host="0.0.0.0", port=11434)

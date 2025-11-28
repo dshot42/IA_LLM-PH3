@@ -1,43 +1,226 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>Chat IA avec Instructions</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Autopilot Nav</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
 <style>
-    body { font-family: Arial; background: #f2f2f2; display: flex; flex-direction: column; align-items: center; padding-top: 40px; }
-    #tabs { display: flex; margin-bottom: 10px; }
-    .tab { padding: 10px 20px; border-radius: 6px 6px 0 0; cursor: pointer; background: #ccc; margin-right: 2px; }
-    .tab.active { background: #0078ff; color: white; }
-    #chatbox, #instructionBox { width: 400px; height: 400px; background: #fff; border-radius: 10px; box-shadow: 0 0 10px #ccc; padding: 15px; overflow-y: auto; }
-    #instructionBox  { display: none; }
-	#chatbox { display: block; }
-	.msg { padding: 8px 12px; border-radius: 6px; margin: 6px 0; max-width: 80%; line-height: 1.4; }
-    .user { background: #0078ff; color: white; margin-left: auto; text-align: right; }
-    .ai { background: #eaeaea; color: #333; margin-right: auto; }
-    #inputArea, #instructionInputArea { display: flex; width: 400px; margin-top: 10px; }
-    textarea { flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #ccc; resize: vertical; font-family: Arial; }
-    #sendBtn, #sendInstrBtn { margin-left: 10px; padding: 10px 15px; border: none; background: #0078ff; color: white; border-radius: 6px; cursor: pointer; }
+    body {
+        font-family: Arial;
+        background: #f2f2f2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-top: 40px;
+		background-color: #ededed;
+    }
+    #tabs {
+        display: flex;
+        margin-bottom: 10px;
+    } 
+	
+	#nav-logo {
+	  margin-bottom: 20px;
+        width: 90vw;
+        max-width:500px;
+	  height: 100px;
+	  border-radius: 10px;
+	  background: linear-gradient(
+		to right,
+		rgb(31 41 55),
+		rgb(31 41 55),
+		#35078f,	
+		rgb(31 41 55),
+		rgb(31 41 55)
+	  );
+	  background-size: 200% 100%;
+	  animation: wave-scroll 4s linear infinite;
+        font-family: Lucida Console;
+	}
+
+	@keyframes wave-scroll {
+	  from { background-position: 0 0; }
+	  to   { background-position: 200% 0; }
+	}
+
+
+    .tab {
+        padding: 10px 20px;
+        border-radius: 6px 6px 0 0;
+        cursor: pointer;
+        background: #ccc;
+        margin-right: 2px;
+    }
+    .tab.active {
+        background: #0078ff;
+        color: white;
+    }
+    #chatbot-block {
+    width: 90vw;
+    max-width:500px;
+    margin:"30px";
+    position: relative;
+    padding: 3px; /* épaisseur de la bordure */
+    border-radius: 10px;
+    background: linear-gradient(
+        90deg,
+        rgb(31 41 55),
+        #00BFFF,
+        #8A2BE2
+    );
+    background-size: 200% 200%;
+    animation: gradient-move 3s linear infinite;
+    margin-bottom: 20px;
+    }
+
+    #chatbox {
+        width: auto;
+        height: 400px;
+        overflow-y: auto;
+        border-radius: 10px;
+        background: #fff;
+        padding: 15px;
+    }
+    @keyframes gradient-move { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+    .msg {
+        padding: 8px 12px;
+        border-radius: 6px;
+        margin: 6px 0;
+        max-width: 80%;
+        line-height: 1.4;
+    }
+    .user {
+        background: #0078ff;
+        color: white;
+        margin-left: auto;
+        text-align: right;
+    }
+    .ai {
+        background: #eaeaea;
+        color: #333;
+        margin-right: auto;
+    }
+    #inputArea{
+        display: flex;
+        width: 90vw;
+        max-width:500px;
+        margin-top: 10px;
+    }
+    textarea {
+        flex: 1;
+        padding: 10px;
+        border-radius: 6px;
+        border: 2px solid transparent;
+        font-family: sans-serif;
+        font-size: 14px;
+        margin-right: 10px !important;
+        border: 2px solid  rgba(0,0,0,0.2);
+    }
+	textarea:focus {
+	  outline: none;
+	  border: 2px solid rgba(31,41,55,0.6);
+	}
+    #sendBtn {
+        margin-left: 10px;
+        padding: 10px 15px;
+        border: none;
+        background:  rgb(31 41 55);
+        color: white;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+    .loader {
+        font-style: italic;
+        opacity: 0.7;
+        animation: blink 1s infinite;
+    }
+    @keyframes blink {
+        0% { opacity: 0.7; }
+        50% { opacity: 0.3; }
+        100% { opacity: 0.7; }
+    }
+	
+
+    /* */
+ .upload-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  background-color: rgb(31 41 55);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  overflow: hidden;
+}
+
+.upload-btn, #sendBtn {
+  transition: background 0.5s, transform 0.2s;
+}
+.upload-btn:hover , #sendBtn:hover {
+  background-color: #0078ff;
+  transform: translateY(-2px);
+}
+
+.upload-btn .icon {
+  margin-right: 6px;
+  font-size: 16px;
+}
+
+/* Cacher le vrai input */
+.upload-btn .file-input {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+
 </style>
 </head>
 <body>
 
-<div id="tabs">
-    <div class="tab active" id="chatTab">Chat</div>
-    <div class="tab" id="instrTab">Instruction</div>
-</div>
+<nav id="nav-logo" class="bg-gray-800 text-white px-4 py-3 flex items-center justify-between shadow-md rounded-lg" >
+  <!-- Logo + Nom -->
+  <div class="flex items-center space-x-3" style="margin:auto;">
+    <!-- Logo (SVG simple) -->
+	<img src="./image/logo2.png" style=" width:auto; height: 70px; ">
+    <span class="text-xl font-bold tracking-wide"> AUTO Pilote</span>
+  </div>
 
-<div id="chatbox"></div>
-<div id="instructionBox"></div>
+  <!-- Menu ou boutons à droite -->
+  <div class="flex items-center space-x-4">
+  </div>
+</nav>
 
-<div id="inputArea">
-    <textarea id="message" placeholder="Rechercher prompt..." rows="3"></textarea>
-    <button id="sendBtn">Envoyer</button>
-</div>
+<div class="promptArea">
+    <div id="chatbot-block">
+        <div id="chatbox"></div>
+    </div>
+	<div id="inputArea">
+		<textarea id="message" placeholder="Rechercher prompt..." rows="3" ></textarea>
+        <button class="upload-btn">
+             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828L18 8.828a4 4 0 10-5.656-5.656L5 11.172a6 6 0 008.485 8.485L19 15.172" />
+            </svg>
+            <input type="file" class="file-input" id="fileInput" />
+        </button>
+        <button id="sendBtn" class="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition">
+        <!-- Icône trombone -->
+        <span>Envoyer</span>
+        </button>
+	</div>
 
-<div id="instructionInputArea" style="display:none;">
-    <textarea id="instruction_prompt" placeholder="Écrire un prompt..." rows="3"></textarea>
-	<textarea id="instruction_instruction" placeholder="Écrire les instruction..." rows="3"></textarea>
-    <button id="sendInstrBtn">Envoyer</button>
+
 </div>
 
 <script>
@@ -45,29 +228,11 @@
 const chatTab = document.getElementById("chatTab");
 const instrTab = document.getElementById("instrTab");
 const chatbox = document.getElementById("chatbox");
-const instructionBox = document.getElementById("instructionBox");
 const inputArea = document.getElementById("inputArea");
-const instructionInputArea = document.getElementById("instructionInputArea");
+const host ="192.168.1.20" // localhost
 
-chatTab.addEventListener("click", () => {
-    chatTab.classList.add("active");
-    instrTab.classList.remove("active");
-    chatbox.style.display = "block";
-    instructionBox.style.display = "none";
-    inputArea.style.display = "flex";
-    instructionInputArea.style.display = "none";
-});
 
-instrTab.addEventListener("click", () => {
-    instrTab.classList.add("active");
-    chatTab.classList.remove("active");
-    chatbox.style.display = "none";
-    instructionBox.style.display = "block";
-    inputArea.style.display = "none";
-    instructionInputArea.style.display = "flex";
-});
-
-// Ajouter message dans un chatbox
+// Ajouter message
 function addMessage(text, sender, box) {
     const chat = box;
     const div = document.createElement("div");
@@ -75,6 +240,30 @@ function addMessage(text, sender, box) {
     div.textContent = text;
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
+}
+
+// Ajouter image
+function addImage(content, sender, box) {
+    const chat = box;
+    const div = document.createElement("div");
+    div.className = "msg " + sender;
+	const img = document.createElement("img");
+    img.src = content;
+    img.style = "object-fit: contain; width:150px; height:auto; ";
+	div.appendChild(img);
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+// Loader
+function addLoader(box) {
+    const chat = box;
+    const div = document.createElement("div");
+    div.className = "msg ai loader";
+    div.textContent = "⏳ L'IA réfléchit...";
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+    return div;
 }
 
 // Envoi message Chat
@@ -86,50 +275,99 @@ function sendMessage() {
     addMessage(userText, "user", chatbox);
     input.value = "";
 
-    fetch("http://localhost:11434/api/generate", {
+    const loader = addLoader(chatbox);
+
+    fetch("http://"+host+":11434/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            prompt: userText
-		})
+        body: JSON.stringify({ prompt: userText })
     })
     .then(res => res.json())
     .then(data => {
+        chatbox.removeChild(loader);
         const botReply = data.reply;
         const assistantText = botReply.split("ASSISTANT:")[1]?.trim() || botReply;
         addMessage(assistantText, "ai", chatbox);
     })
     .catch(err => {
+        chatbox.removeChild(loader);
         addMessage("Erreur : " + err, "ai", chatbox);
     });
 }
 
-// Envoi Instruction
-function sendInstruction() {
-    const prompt = document.getElementById("instruction_prompt").value.trim();
-	const instruction = document.getElementById("instruction_instruction").value.trim();
-    if (!(prompt && instruction)) return;
 
-    addMessage(prompt+" , "+ instruction, "user", instructionBox);
-
-    fetch("http://localhost:11434/api/instruction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt, instruction : instruction })
-    })
-    .then(res => res.json())
-    .then(data => {
-        addMessage(data.status, "ai", instructionBox);
-    })
-    .catch(err => {
-        addMessage("Erreur : " + err, "ai", instructionBox);
-    });
-}
 
 // Listeners
 document.getElementById("sendBtn").addEventListener("click", sendMessage);
-document.getElementById("message").addEventListener("keypress", e => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
-document.getElementById("sendInstrBtn").addEventListener("click", sendInstruction);
+document.getElementById("message").addEventListener("keypress", e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+
+// Upload image
+function fileLoader() {
+    const input = document.getElementById("fileInput");
+
+    input.addEventListener("change", () => {
+        const file = input.files[0];
+        if (file) {
+            const reader = new FileReader();
+
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => {
+                    // ⚡ Création d’un canvas pour réduire la taille
+                    const canvas = document.createElement("canvas");
+                    const ctx = canvas.getContext("2d");
+
+                    // Dimensions cibles (exemple : largeur max 300px)
+                    const maxWidth = 300;
+                    const scale = maxWidth / img.width;
+                    canvas.width = maxWidth;
+                    canvas.height = img.height * scale;
+
+                    // Dessiner l'image réduite
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    // Récupérer la version réduite en Base64 (JPEG qualité 80%)
+                    const img64 = canvas.toDataURL("image/jpeg", 0.8);
+
+                    // Afficher l’image réduite dans le chat
+                    addImage(img64, "user", chatbox);
+
+                    // Loader IA
+                    const loader = addLoader(chatbox);
+
+                    // Envoi au backend
+                    fetch("http://"+host+":11434/api/prompt/image", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ prompt: img64 })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        chatbox.removeChild(loader);
+                          const botReply = data.reply;
+                         const assistantText = botReply.split("ASSISTANT:")[1]?.trim() || botReply;
+                        addMessage(assistantText, "ai", chatbox);
+                    })
+                    .catch(err => {
+                         chatbox.removeChild(loader);
+                        addMessage("Erreur : " + err, "ai", chatbox);
+                    });
+                };
+                img.src = e.target.result;
+            };
+
+            reader.readAsDataURL(file);
+        }
+    });
+}
+
+fileLoader();
 </script>
 
 </body>

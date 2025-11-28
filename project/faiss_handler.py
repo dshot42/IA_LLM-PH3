@@ -3,9 +3,10 @@ import os
 import faiss
 import pickle
 from sentence_transformers import SentenceTransformer
-
+from sklearn.preprocessing import normalize
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from config import Config
+import math
 
 # 🔹 Variables pour index et métadonnées
 INDEX_FILE = os.path.join(Config.INDEX_FAISS, "faiss_index.idx")
@@ -13,9 +14,6 @@ META_FILE = os.path.join(Config.INDEX_FAISS, "faiss_metadata.pkl")
 
 
 def load_faiss_index():
-    """
-    Charge l'index FAISS et les métadonnées si elles existent.
-    """
     if os.path.exists(INDEX_FILE) and os.path.exists(META_FILE):
         print("📂 Index FAISS trouvé, chargement...")
         index = faiss.read_index(INDEX_FILE)
@@ -24,6 +22,7 @@ def load_faiss_index():
         chunks = data["chunks"]
         metadata = data["metadata"]
         embedder = SentenceTransformer(Config.RAG_MODEL)
+        print("Load count chunks:", len(chunks))
         return chunks, metadata, embedder, index
     else:
         print("⚠️ Aucun index existant.")
@@ -45,23 +44,20 @@ def save_faiss_index(index, chunks, metadata):
 
 
 def build_faiss_index(chunks, metadata):
-    """
-    Crée un nouvel index FAISS à partir de chunks et metadata.
-    """
     if not chunks:
-        print("⚠️ Aucun chunk disponible")
+        print("⚠️ Aucun chunk à indexer")
         return None, None
 
     embedder = SentenceTransformer(Config.RAG_MODEL)
     embeddings = embedder.encode(chunks, convert_to_numpy=True)
-    print("Shape des embeddings :", embeddings.shape)
+    embeddings = normalize(embeddings, axis=1)  # ||v|| = 1
 
-    dimension = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dimension)
+    dim = embeddings.shape[1]
+    index = faiss.IndexFlatL2(dim)  # inner product = cosine similarity
     index.add(embeddings)
 
     save_faiss_index(index, chunks, metadata)
-    print(f"Index FAISS créé avec {index.ntotal} vecteurs")
+    print(f"✅ Index FAISS créé avec {index.ntotal} vecteurs normalisés")
     return embedder, index
 
 
@@ -98,38 +94,44 @@ def faiss_index_handler(new_chunks, new_metadata):
     metadata.extend(metadata_to_add)
 
     save_faiss_index(index, chunks, metadata)
+    for f in  list({m.get("path") for m in metadata_to_add}):
+      print(f"Ajout du Document  : {f}")
+      
     print(f"✅ {len(chunks_to_add)} nouveaux documents ajoutés à l'index FAISS.")
-
     return chunks, metadata, embedder, index
 
 
-def retrieve(query, embedder, index, chunks, metadata, top_k=5):
-    """
-    Recherche les top_k chunks les plus proches d'une query.
-    Version sécurisée pour éviter les erreurs.
-    """
-    if index is None or index.ntotal == 0:
-        print("⚠️ L'index FAISS est vide.")
+import numpy as np
+
+def retrieve(query, top_k=5, min_score=0.5): # 0.5 tolerance 0.7 strict
+    chunks, metadata, embedder, index = load_faiss_index()
+    if not embedder or index is None or not chunks or not metadata:
         return []
 
-    if not chunks or not metadata:
-        print("⚠️ Les chunks ou metadata sont vides.")
-        return []
-
-    # Assurer que top_k ne dépasse pas le nombre de vecteurs
     top_k = min(top_k, index.ntotal)
 
+    # Embedding de la query et normalisation
     query_vector = embedder.encode([query], convert_to_numpy=True)
-    distances, indices = index.search(query_vector, top_k)
+    query_vector = normalize(query_vector, axis=1).astype("float32")
+
+    # Recherche FAISS
+    scores, indices = index.search(query_vector, top_k)
 
     results = []
-    for idx in indices[0]:
-        if idx < len(chunks):
+
+    for dist, idx in zip(scores[0], indices[0]):
+        if idx >= len(chunks):
+            continue
+       
+        alpha = 1.0
+        score = math.exp(-alpha * dist) # lissage exp 0-1
+        
+        print("score:", score, "doc:", metadata[idx]["source"])
+        if score >= min_score:  #  plus le score est proche de 1 plus la prediction est bonne ! 
             results.append({
                 "text": chunks[idx],
-                "metadata": metadata[idx]
+                "metadata": metadata[idx],
+                "score": float(score)
             })
-        else:
-            print(f"⚠️ Index FAISS {idx} hors limites pour chunks (len={len(chunks)})")
 
     return results

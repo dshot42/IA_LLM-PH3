@@ -5,3 +5,4 @@ project/__pycache__
 project/models/*
 project/lora_model
 token.txt
+project/RAG/archive/document_personnel

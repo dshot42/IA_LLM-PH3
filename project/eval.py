@@ -6,6 +6,7 @@ from PIL import Image
 from transformers import Blip2Processor, Blip2ForConditionalGeneration
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import base64
+from playwright.async_api import async_playwright
 
 def evaluate_model(model, tokenizer):
     prompts = [
@@ -29,7 +30,7 @@ def timeout(signum, frame):
 
         
 def load_image_model():
-    processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
+    processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl",use_fast=True)
     vision_model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-flan-t5-xl") #"./models/models--Salesforce--blip2-flan-t5-xl/snapshots/0eb0d3b46c14c1f8c7680bca2693baafdb90bb28")
     return processor , vision_model
        
@@ -43,60 +44,69 @@ def prompt_image(image64,model,tokenizer):
     image_description = processor.decode(generated_ids[0], skip_special_tokens=True)
     
     query = f"Analyse cette image : {image_description}. réponse en français"
-    response_text = prompt_query(query, model, tokenizer)
-    return response_text
+    return faiss_search(query, model, tokenizer)
     
-      
-def faiss_search(query, model, tokenizer, threshold=0.7):
+def faiss_search(query, model, tokenizer):
     """
-    Cherche dans FAISS, si résultat pertinent → utilise contexte.
-    Sinon → fallback sans contexte.
+    Recherche dans FAISS, si résultats pertinents → utilise contexte.
+    Sinon → fallback vers modèle brut sans contexte.
     """
-    all_chunks, metadata, embedder, index = faiss_handler.load_faiss_index()
 
-    if embedder and index and all_chunks:
-        retrieved = faiss_handler.retrieve(query, embedder, index, all_chunks, metadata)
+    # Récupération des chunks pertinents
+    retrieved = faiss_handler.retrieve(
+        query,
+        top_k=2,  # ajustable
+    )
 
-        # Si aucun résultat ou score trop faible → fallback
-        if not retrieved or retrieved[0].get("score", 1.0) > threshold:
-            print("⚠️ Pas de contexte pertinent, fallback vers modèle brut.")
-            return prompt_query(query, model, tokenizer)
-
-        # Construire le contexte
-        context = "\n\n".join([
-            f"Texte: {r['text'][:Config.CHUNK_SIZE]}...\nChemin: {r['metadata'].get('path','inconnu')}\nSource: {r['metadata'].get('source','inconnu')}\nPage: {r['metadata'].get('page','?')}"
-            for r in retrieved[:10]
-        ])
-
-        prompt = f"""
-        Tu es un assistant qui répond aux questions en analysant le contexte.
-        Lis attentivement les archives et donne une réponse courte et claire.
-
-        Contexte:
-        {context}
-
-        Question:
-        {query}
-        
-        Réponse courte :
-        """
-        return prompt_query(prompt, model, tokenizer)
-
-    else:
-        print("⚠️ Aucun index disponible, fallback direct.")
+    if not retrieved:
+        print("⚠️ Aucun chunk pertinent (score < threshold). Fallback vers LLM brut.")
         return prompt_query(query, model, tokenizer)
 
+    # Construire le contexte
+    context = "\n\n".join([
+        f"Texte: {r['text'][:Config.CHUNK_SIZE]}...\n"
+        f"Chemin: {r['metadata'].get('path','inconnu')}\n"
+        f"Source: {r['metadata'].get('source','inconnu')}\n"
+        f"Page: {r['metadata'].get('page','?')}\n"
+        f"Score: {round(r.get('score', 0), 3)}"
+        for r in retrieved[:2]
+    ])
 
-def prompt_query(prompt, model, tokenizer):
+    # Prompt final
+    prompt = f"""
+    Tu es un assistant français RAG. Tu dois répondre uniquement à partir du contexte fourni.
+    Ne répète jamais le texte original, synthétise uniquement l'information utile.
+    Réponse courte et précise, maximum {Config.MAX_OUTPUT_TOKEN} tokens.
+    Contexte :
+    {context}
+
+    Question : 
+    {query}
+    """.strip()
+    return prompt_query(prompt, model, tokenizer, with_context=True)
+
+
+
+
+def prompt_query(prompt, model, tokenizer,with_context=False):
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
+    
+    if with_context == False:
+        prompt = f"""
+        Tu es un assistant intelligent en français.
+        Réponse courte, claire et précise, en maximum {Config.MAX_OUTPUT_TOKEN} tokens.
+        
+        Question:
+        {prompt}
+        """
     def run_generation():
         with torch.no_grad():
             return model.generate(
                 **inputs,
                 max_new_tokens=Config.MAX_OUTPUT_TOKEN,
                 do_sample=True,
-                top_p=Config.TOP_P,
+                top_p=Config.TOP_P,      # <-- warning
+                top_k=Config.TOP_K,      # <-- warning
                 temperature=Config.TEMPERATURE
             )
 
