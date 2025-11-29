@@ -1,3 +1,4 @@
+import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import model as model_utils
@@ -37,6 +38,7 @@ if __name__ == "__main__":
     #model = model_utils.load_model_with_qlora()
 
     model = model_utils.load_standard_model()
-    print(" --- Model with QLoRA Loaded ...")
     # === Lancer le serveur Flask ===
+    response_text = eval.prompt_query("Bonjour", model, tokenizer)
+
     app.run(host="0.0.0.0", port=11434)

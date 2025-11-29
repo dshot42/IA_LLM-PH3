@@ -4,7 +4,7 @@ from config import Config
 import torch
 
 def load_tokenizer():
-    tokenizer = AutoTokenizer.from_pretrained(Config.MODEL_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(Config.MODEL_NAME, use_fast=True, trust_remote_code=True)
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -21,12 +21,9 @@ def load_model_with_sft():
 
     return model
 
-def load_model_with_lora(load_in_4bit=True, load_in_8bit=False):
-    model = AutoModelForCausalLM.from_pretrained(
-        Config.MODEL_NAME,
-        device_map="auto"
-    )
-
+def load_model_with_lora():
+    model = load_standard_model()
+    
     lora_config = LoraConfig(
         r=Config.LORA_R,
         lora_alpha=Config.LORA_ALPHA,
@@ -42,9 +39,23 @@ def load_model_with_lora(load_in_4bit=True, load_in_8bit=False):
     return model
 
 def load_standard_model(load_in_4bit=True, load_in_8bit=False, double_quant=True, compute_dtype="float16", quant_type="nf4"):
+    bnb_config = None
+    if load_in_4bit or load_in_8bit:
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=load_in_4bit,
+            load_in_8bit=load_in_8bit,
+            bnb_4bit_compute_dtype=compute_dtype,
+            bnb_4bit_use_double_quant=double_quant,
+            bnb_4bit_quant_type=quant_type
+        )
+
     model = AutoModelForCausalLM.from_pretrained(
         Config.MODEL_NAME,
-        device_map="auto"    
+        device_map=Config.DEVICE_MAP,
+        #quantization_config=bnb_config, #gpu uniquement
+        dtype=compute_dtype,
+        #trust_remote_code=True,
+        attn_implementation="eager",   # IMPORTANT → pas "attn_impl"
     )
     return model
 

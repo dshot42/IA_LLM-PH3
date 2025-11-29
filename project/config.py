@@ -6,7 +6,10 @@ class BaseConfig(object):
     BASEDIR = op.abspath(op.dirname(__file__))
     PROJECT_ROOT = BASEDIR
 
-    MODEL_NAME ="./models/Phi-3-mini-128k-instruct" # "models/phi2-mini| Phi-3-mini-128k-instruct | Llama-3.1-8B"
+    DEVICE_MAP="cpu" # cuda , xpu
+    #MODEL_NAME ="./models/Phi-3-small-128k-instruct" # CUDA gros model a faire tourner en 4bit ou 8 via GPU
+    MODEL_NAME ="./models/Phi-3-mini-128k-instruct" # CPU "models/phi2-mini| Phi-3-mini-128k-instruct | Llama-3.1-8B"
+
     TARGET_MODULES = ["self_attn.qkv_proj", "self_attn.o_proj"] #phi3
     #TARGET_MODULES = ["q_proj", "v_proj"] #phi2/qwen  
     #TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj"] # llama 3
@@ -43,5 +46,8 @@ class BaseConfig(object):
     INDEX_FAISS = "./models/FAISS/"
     RAG_WEB_ARCHIVE_PATH="./RAG/web_ressources"
     CHUNK_SIZE=1000
+    RAG_MIN_SCORE=0.5
+    
+    SERVER_TIMEOUT=200 # 200 sec par default
 
 Config = BaseConfig

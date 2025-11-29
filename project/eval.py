@@ -113,7 +113,7 @@ def prompt_query(prompt, model, tokenizer,with_context=False):
     with ThreadPoolExecutor() as executor:
         future = executor.submit(run_generation)
         try:
-            output = future.result(timeout=200)  # timeout de 100 sec
+            output = future.result(timeout=Config.SERVER_TIMEOUT)  # timeout de 100 sec
             decoded = tokenizer.decode(output[0], skip_special_tokens=True)
             print(f"\nPrompt: {prompt}\nResponse: {decoded}")
             return decoded[len(prompt):].strip()

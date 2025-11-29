@@ -103,7 +103,7 @@ def faiss_index_handler(new_chunks, new_metadata):
 
 import numpy as np
 
-def retrieve(query, top_k=5, min_score=0.5): # 0.5 tolerance 0.7 strict
+def retrieve(query, top_k=5, min_score=Config.RAG_MIN_SCORE): # 0.5 tolerance 0.7 strict
     chunks, metadata, embedder, index = load_faiss_index()
     if not embedder or index is None or not chunks or not metadata:
         return []

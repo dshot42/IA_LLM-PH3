@@ -1,6 +1,6 @@
 git lfs install
 
-pip install --upgrade -r requirements.txt
+pip install -r requirements.txt
 
 
 REM git clone https://huggingface.co/microsoft/phi-2  ./project/models
