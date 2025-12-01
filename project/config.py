@@ -20,9 +20,9 @@ class BaseConfig(object):
     EPOCHS = 1
     BATCH_SIZE = 2
     LEARNING_RATE = 2e-5
-    MAX_OUTPUT_TOKEN = 200 # / 50 pour test uniquement
+    MAX_OUTPUT_TOKEN = 300 # / 50 pour test uniquement
     TOP_P = 0.9
-    TEMPERATURE = 0.7
+    TEMPERATURE = 0.7 # plus pertinant en RAG
     TOP_K=40
     
     ''' POUR RAG
@@ -36,17 +36,20 @@ class BaseConfig(object):
     TOP_K=40
  
     '''
-    MAX_LENGTH = 512
+    MAX_LENGTH =512 # 512 
 
     OUTPUT_DIR = "./models/lora/phi3-lora"
     
     ####### RAG #######
-    RAG_MODEL = "./models/all-MiniLM-L6-v2" # pour le embeded
+    RAG_MODEL = "./models/bge" # pour le embeded  "./models/bge" "BAAI/bge-base-en-v1.5"
     RAG_ARCHIVE_PATH = "./RAG/archive"    
     INDEX_FAISS = "./models/FAISS/"
     RAG_WEB_ARCHIVE_PATH="./RAG/web_ressources"
-    CHUNK_SIZE=1000
-    RAG_MIN_SCORE=0.5
+    CHUNK_SIZE=500 # taille des chunks de doc pour FAISS 
+    RAG_MIN_SCORE=0.8 #seuil min de pertinence pour repondre en RAG 0.7 
+    nb_chunks_to_use=1000
+    #on prend en compte les X meilleurs chunks  
+    #et on check si > RAG_MIN_SCORE pour la reponse RAG avant prompt a mon model LLM, 5 à 10 pour gros LLM 7B
     
     SERVER_TIMEOUT=200 # 200 sec par default
 

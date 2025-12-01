@@ -20,4 +20,7 @@ git clone https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2 ./projec
 REM ici download repo pour image
 REM  todo 
 REM huggingface-cli login   # si tu veux, mais pas toujours obligatoire
-huggingface-cli download johnlam90/phi3-mini-4k-instruct-alpaca-lora --local-dir ./phi3-lora ./project/models/lora
+pip install -U huggingface_hub
+huggingface-cli download johnlam90/phi3-mini-4k-instruct-alpaca-lora --local-dir ./project/models/lora
+
+huggingface-cli download BAAI/bge-large-en-v1.5 --local-dir ./project/models/bge

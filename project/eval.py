@@ -6,6 +6,9 @@ from PIL import Image
 from transformers import Blip2Processor, Blip2ForConditionalGeneration
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import base64
+import history_handler
+import  web_search_handler
+
 from playwright.async_api import async_playwright
 
 def evaluate_model(model, tokenizer):
@@ -20,7 +23,7 @@ def evaluate_model(model, tokenizer):
 
     print("\n --- Running Evaluation:")
     for prompt in prompts:
-        prompt_query(prompt,model,tokenizer)
+        prompt_query("none",prompt,model,tokenizer)
         
 def timeout(signum, frame):
     raise TimeoutError("Temps d'exécution dépassé")
@@ -34,7 +37,7 @@ def load_image_model():
     vision_model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-flan-t5-xl") #"./models/models--Salesforce--blip2-flan-t5-xl/snapshots/0eb0d3b46c14c1f8c7680bca2693baafdb90bb28")
     return processor , vision_model
        
-def prompt_image(image64,model,tokenizer):
+def prompt_image(user_ip, image64,model,tokenizer):
     processor , vision_model = load_image_model()
     image_bytes = base64.b64decode(image64)
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
@@ -44,9 +47,9 @@ def prompt_image(image64,model,tokenizer):
     image_description = processor.decode(generated_ids[0], skip_special_tokens=True)
     
     query = f"Analyse cette image : {image_description}. réponse en français"
-    return faiss_search(query, model, tokenizer)
+    return faiss_search(user_ip, query, model, tokenizer)
     
-def faiss_search(query, model, tokenizer):
+def faiss_search(user_ip, query, model, tokenizer):
     """
     Recherche dans FAISS, si résultats pertinents → utilise contexte.
     Sinon → fallback vers modèle brut sans contexte.
@@ -54,49 +57,79 @@ def faiss_search(query, model, tokenizer):
 
     # Récupération des chunks pertinents
     retrieved = faiss_handler.retrieve(
-        query,
-        top_k=2,  # ajustable
+        user_ip,
+        query
     )
 
     if not retrieved:
         print("⚠️ Aucun chunk pertinent (score < threshold). Fallback vers LLM brut.")
-        return prompt_query(query, model, tokenizer)
+        return prompt_query(user_ip, query, model, tokenizer)
 
     # Construire le contexte
     context = "\n\n".join([
-        f"Texte: {r['text'][:Config.CHUNK_SIZE]}...\n"
+        f"Texte: {r['text']}...\n"
         f"Chemin: {r['metadata'].get('path','inconnu')}\n"
         f"Source: {r['metadata'].get('source','inconnu')}\n"
         f"Page: {r['metadata'].get('page','?')}\n"
         f"Score: {round(r.get('score', 0), 3)}"
-        for r in retrieved[:2]
+        for r in retrieved
     ])
 
     # Prompt final
     prompt = f"""
     Tu es un assistant français RAG. Tu dois répondre uniquement à partir du contexte fourni.
     Ne répète jamais le texte original, synthétise uniquement l'information utile.
+    Ne génère pas de questions, juste une réponse concise et précise.
     Réponse courte et précise, maximum {Config.MAX_OUTPUT_TOKEN} tokens.
-    Contexte :
+    
+    Contexte RAG:
     {context}
 
-    Question : 
+    Question actuelle : 
     {query}
     """.strip()
-    return prompt_query(prompt, model, tokenizer, with_context=True)
+    return prompt_query(user_ip, prompt, model, tokenizer, with_context=True)
 
 
-
-
-def prompt_query(prompt, model, tokenizer,with_context=False):
+def prompt_query(user_ip,prompt, model, tokenizer,with_context=False):
+    
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     
+    history = history_handler.filter_relevant_history(user_ip, prompt)  # cherche dans l'historique si contexte pertiant au prompt
+
+    history_handler.add_user_query(user_ip,prompt)   
+    
+
+    # Formater l'historique en texte
+
+                
+    history_text = ""
+    if history:
+        history_text = "Historique des échanges :\n"
+        for i, h in enumerate(history, 1):
+            history_text += f"{i}. {h}\n"
+
+    
     if with_context == False:
+        web_results = web_search_handler.searchWeb(prompt)
+        context_text = ""
+        if web_results:
+            context_text = "Contexte Web (extraits pertinents) :\n"
+            for i, r in enumerate(web_results, 1):
+                context_text += f"{i}. {r['title']} | {r['url']}\n"
+                if r['snippet']:
+                    context_text += f"   {r['snippet']}\n"
+                    
         prompt = f"""
         Tu es un assistant intelligent en français.
+        Ne génère pas de questions, juste une réponse concise et précise.
         Réponse courte, claire et précise, en maximum {Config.MAX_OUTPUT_TOKEN} tokens.
+
+        {'Historique des prompt :' + history_text if history_text else ''} 
         
-        Question:
+        {'Contexte WEB: ' + context_text if context_text else ''}
+        
+        Question actuelle:
         {prompt}
         """
     def run_generation():
@@ -105,17 +138,17 @@ def prompt_query(prompt, model, tokenizer,with_context=False):
                 **inputs,
                 max_new_tokens=Config.MAX_OUTPUT_TOKEN,
                 do_sample=True,
-                top_p=Config.TOP_P,      # <-- warning
-                top_k=Config.TOP_K,      # <-- warning
+                top_p=Config.TOP_P,   
+                top_k=Config.TOP_K, 
                 temperature=Config.TEMPERATURE
             )
 
     with ThreadPoolExecutor() as executor:
         future = executor.submit(run_generation)
         try:
-            output = future.result(timeout=Config.SERVER_TIMEOUT)  # timeout de 100 sec
+            output = future.result(timeout=Config.SERVER_TIMEOUT)  # timeout
             decoded = tokenizer.decode(output[0], skip_special_tokens=True)
-            print(f"\nPrompt: {prompt}\nResponse: {decoded}")
+            print("### result : " +decoded[len(prompt):].strip())
             return decoded[len(prompt):].strip()
         except TimeoutError:
-            return "⏱️ La génération a dépassé le délai imparti (200 sec)"
+            return f"⏱️ La génération a dépassé le délai imparti ({Config.SERVER_TIMEOUT} sec)"

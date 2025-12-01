@@ -10,4 +10,4 @@ with open(output_file, "w") as f:
             continue
         f.write(f"{dist.project_name}=={dist.version}\n")
 
-print(f"✅ requirements.txt généré avec {len(pkg_resources.working_set)} packages (CPU-only filtré).")
+print(f"✅ requirements.txt généré avec {len(pkg_resources.working_set)} .")

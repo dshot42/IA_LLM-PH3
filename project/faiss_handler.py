@@ -1,137 +1,285 @@
-import sys
-import os
-import faiss
-import pickle
+import os, pickle, re, json, numpy as np
 from sentence_transformers import SentenceTransformer
-from sklearn.preprocessing import normalize
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from sklearn.preprocessing import normalize as sk_normalize
+import faiss
 from config import Config
-import math
+import history_handler
+from rank_bm25 import BM25Okapi
 
-# 🔹 Variables pour index et métadonnées
+# 🔹 Paramètres
 INDEX_FILE = os.path.join(Config.INDEX_FAISS, "faiss_index.idx")
 META_FILE = os.path.join(Config.INDEX_FAISS, "faiss_metadata.pkl")
+DIM = 768  # dimension forcée pour BGE
 
+# ----------------- Préprocessing stopwords -----------------
+def preprocess_stopwords():
+    with open("french_stopwords.json", "r", encoding="utf-8") as f:
+        stopwords = json.load(f)
+    clean = []
+    for w in stopwords:
+        tok = re.findall(r"[a-zA-Z0-9éèêàùôîç]+", w.lower())
+        clean.extend(tok)
+    return list(set(clean))
 
+# ----------------- Projection embeddings -----------------
+def project_to_768(vec):
+    """
+    vec : np.array shape (n, 1024)
+    retourne : np.array shape (n, 768)
+    """
+    if vec.shape[1] == DIM:
+        return vec.astype(np.float32)
+    
+    np.random.seed(42)  # pour reproductibilité
+    proj = np.random.randn(vec.shape[1], DIM).astype(np.float32) / np.sqrt(vec.shape[1])
+    return np.dot(vec, proj)
+
+# ----------------- Index FAISS -----------------
 def load_faiss_index():
     if os.path.exists(INDEX_FILE) and os.path.exists(META_FILE):
-        print("📂 Index FAISS trouvé, chargement...")
         index = faiss.read_index(INDEX_FILE)
         with open(META_FILE, "rb") as f:
             data = pickle.load(f)
         chunks = data["chunks"]
         metadata = data["metadata"]
         embedder = SentenceTransformer(Config.RAG_MODEL)
-        print("Load count chunks:", len(chunks))
         return chunks, metadata, embedder, index
-    else:
-        print("⚠️ Aucun index existant.")
-        return None, None, None, None
-
+    return None, None, None, None
 
 def save_faiss_index(index, chunks, metadata):
-    """
-    Sauvegarde l'index FAISS et les métadonnées.
-    """
     os.makedirs(os.path.dirname(INDEX_FILE), exist_ok=True)
     faiss.write_index(index, INDEX_FILE)
     with open(META_FILE, "wb") as f:
         pickle.dump({"chunks": chunks, "metadata": metadata}, f)
 
-    doc_names = [m.get("path", "inconnu") for m in metadata]
-    print("✅ Index FAISS et métadonnées sauvegardés pour les documents :", ", ".join(doc_names))
-    print("--------------------------")
-
-
 def build_faiss_index(chunks, metadata):
     if not chunks:
-        print("⚠️ Aucun chunk à indexer")
-        return None, None
+        return [], [], None, None
 
     embedder = SentenceTransformer(Config.RAG_MODEL)
-    embeddings = embedder.encode(chunks, convert_to_numpy=True)
-    embeddings = normalize(embeddings, axis=1)  # ||v|| = 1
+    embeddings = embedder.encode(chunks, convert_to_numpy=True).astype("float32")
 
-    dim = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dim)  # inner product = cosine similarity
+    # Projection sur 768
+    embeddings = project_to_768(embeddings)
+    embeddings = sk_normalize(embeddings, axis=1)
+
+    index = faiss.IndexFlatIP(DIM)
     index.add(embeddings)
-
     save_faiss_index(index, chunks, metadata)
-    print(f"✅ Index FAISS créé avec {index.ntotal} vecteurs normalisés")
-    return embedder, index
 
-
-def faiss_index_handler(new_chunks, new_metadata):
-    """
-    Ajoute de nouveaux chunks à l'index existant ou crée un nouvel index si nécessaire.
-    """
-    chunks, metadata, embedder, index = load_faiss_index()
-
-    # Si aucun index existant, on le crée directement
-    if chunks is None or metadata is None or index is None:
-        print("⚠️ Création d'un nouvel index FAISS pour les nouveaux documents...")
-        embedder, index = build_faiss_index(new_chunks, new_metadata)
-        return new_chunks, new_metadata, embedder, index  # <-- Retourne bien 4 valeurs
-
-    # Détecter les nouveaux documents pour éviter les doublons
-    new_entries = []
-    existing_filenames = [m.get("path") for m in metadata]
-    for chunk, meta in zip(new_chunks, new_metadata):
-        if meta.get("path") not in existing_filenames:
-            new_entries.append((chunk, meta))
-
-    if not new_entries:
-        print("ℹ️ Aucun nouveau document à ajouter.")
-        return chunks, metadata, embedder, index
-
-    # Ajouter les embeddings des nouveaux chunks
-    chunks_to_add, metadata_to_add = zip(*new_entries)
-    embeddings_to_add = embedder.encode(list(chunks_to_add), convert_to_numpy=True)
-    index.add(embeddings_to_add)
-
-    # Mettre à jour les listes
-    chunks.extend(chunks_to_add)
-    metadata.extend(metadata_to_add)
-
-    save_faiss_index(index, chunks, metadata)
-    for f in  list({m.get("path") for m in metadata_to_add}):
-      print(f"Ajout du Document  : {f}")
-      
-    print(f"✅ {len(chunks_to_add)} nouveaux documents ajoutés à l'index FAISS.")
     return chunks, metadata, embedder, index
 
-
-import numpy as np
-
-def retrieve(query, top_k=5, min_score=Config.RAG_MIN_SCORE): # 0.5 tolerance 0.7 strict
+def faiss_index_handler(new_chunks, new_metadata):
     chunks, metadata, embedder, index = load_faiss_index()
-    if not embedder or index is None or not chunks or not metadata:
+    if not chunks:
+        return build_faiss_index(new_chunks, new_metadata)
+    
+    existing_files = [m.get("path") for m in metadata]
+    new_entries = [(c, m) for c, m in zip(new_chunks, new_metadata) if m.get("path") not in existing_files]
+    
+    if not new_entries:
+        return chunks, metadata, embedder, index
+
+    chunks_to_add, metadata_to_add = zip(*new_entries)
+    embeddings_to_add = embedder.encode(list(chunks_to_add), convert_to_numpy=True).astype("float32")
+
+    # Projection sur 768
+    embeddings_to_add = project_to_768(embeddings_to_add)
+    embeddings_to_add = sk_normalize(embeddings_to_add, axis=1)
+
+    index.add(embeddings_to_add)
+    chunks.extend(chunks_to_add)
+    metadata.extend(metadata_to_add)
+    save_faiss_index(index, chunks, metadata)
+    return chunks, metadata, embedder, index
+
+# ----------------- TF-IDF boost -----------------
+def apply_tfidf_sort(
+        query,
+        embedder,
+        min_weight=0.15,
+        boost_factor=3.0,
+        mix_query=0.3,
+        stopword_factor=0.05,
+        mode="sum"
+    ):
+    """
+    Version améliorée :
+    - pondération TF-IDF stabilisée
+    - stopwords fortement réduits mais pas annulés
+    - encodage batch pour accélérer
+    - poids minimum + softmax pour lisser
+    - blending final intelligent
+    """
+
+    # 1) Tokenisation propre
+    tokens = re.findall(r"[a-zA-Z0-9éèêàùôîç]+", query.lower())
+    if not tokens:
+        return query, embedder.encode([query], convert_to_numpy=True)
+
+    stopwords = set(preprocess_stopwords())
+
+    # 2) TF-IDF
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    vectorizer = TfidfVectorizer(token_pattern=r"[a-zA-Z0-9éèêàùôîç]+")
+    tfidf_scores = vectorizer.fit_transform([" ".join(tokens)]).toarray().flatten()
+    tfidf_dict = dict(zip(vectorizer.get_feature_names_out(), tfidf_scores))
+
+    # 3) Encodage batch → 10x plus rapide
+    token_embeddings = embedder.encode(tokens, convert_to_numpy=True).astype("float32")
+
+    # 4) Calcul poids
+    weights = []
+    for tok in tokens:
+
+        if tok in stopwords or len(tok) <= 2:
+            # Faible mais jamais 0
+            w = stopword_factor
+
+        else:
+            raw_tfidf = tfidf_dict.get(tok, 0.0)
+
+            # log-smoothing + boost
+            w = min_weight + boost_factor * (1 + np.log1p(raw_tfidf))
+
+        weights.append(w)
+
+    weights = np.array(weights)
+
+    # Normalisation softmax → bonne répartition
+    weights = np.exp(weights) / np.sum(np.exp(weights))
+
+    # 5) Application des poids
+    weighted_embeddings = token_embeddings * weights[:, None]
+
+    # 6) Agrégation
+    if mode == "sum":
+        vec = np.sum(weighted_embeddings, axis=0, keepdims=True)
+    else:
+        vec = np.mean(weighted_embeddings, axis=0, keepdims=True)
+
+    vec = sk_normalize(vec, axis=1).astype("float32")
+
+    # 7) Blending final avec embedding du query original
+    query_embed = sk_normalize(embedder.encode([query], convert_to_numpy=True), axis=1)
+
+    # Si prompt très long → réduire mix_query
+    adaptive_mix = mix_query * (1 / (1 + len(tokens) / 8))
+
+    vec = sk_normalize((1 - adaptive_mix) * vec + adaptive_mix * query_embed, axis=1)
+
+    return " ".join(tokens), vec
+
+
+# ----------------- Boost metadata -----------------
+def augment_query_with_metadata(query_vec: np.ndarray, query: str, metadata_list: list, embedder):
+    # Extraire les mots du query
+    tokens = re.findall(r"[a-zA-Z0-9éèêàùôîç]+", query.lower())
+
+    # Charger stopwords
+    stopwords = set(preprocess_stopwords())
+
+    matched_vecs = []
+
+    for meta in metadata_list:
+        source = meta.get("source", "")
+        if not isinstance(source, str):
+            continue
+
+        source_low = source.lower()
+
+        # For each word in query (not in stopwords)
+        for tok in tokens:
+            if tok in stopwords:
+                continue
+
+            # search word inside metadata source
+            if re.search(re.escape(tok), source_low):
+                #print(f"[BOOST] '{tok}' found in metadata source '{source_low}'")
+                m_vec = embedder.encode([tok], convert_to_numpy=True)
+                matched_vecs.append(m_vec)
+
+    # Si des mots matchent → booster
+    if matched_vecs:
+        matched_vecs = np.vstack(matched_vecs)
+        boosted = np.mean(np.vstack([query_vec, matched_vecs]), axis=0, keepdims=True)
+        return boosted
+
+    print("Metadata not matched in query.")
+    return query_vec
+
+
+# ----------------- Ultra ReRanking -----------------
+def ultra_reranker_scores(sims, eps=1e-9):
+    sims = np.array(sims, dtype=float)
+    similarities = np.clip(sims, 0, 1)
+    top_sim = np.max(similarities)
+    contrasts = top_sim - similarities
+    alpha = 50
+    boosts = 1 / (1 + np.exp(-alpha * (contrasts - 0.05)))
+    raw_scores = 0.6 * similarities + 0.4 * boosts
+    final_scores = (1 - (raw_scores - raw_scores.min()) / (raw_scores.max() - raw_scores.min() + eps)) * sims # * sims important
+    return final_scores, similarities, contrasts, boosts
+
+# ----------------- Retrieval -----------------
+
+
+from rank_bm25 import BM25Okapi
+import re
+import numpy as np
+from sklearn.preprocessing import normalize as sk_normalize
+
+def retrieve(user_ip: str, query: str, top_k: int = Config.nb_chunks_to_use, query_weight: float = 1):
+    print("--- FAISS first → BM25 rerank ---")
+    chunks, metadata, embedder, index = load_faiss_index()
+    if not embedder or not chunks or not index:
         return []
 
-    top_k = min(top_k, index.ntotal)
+    # ---------------- TF-IDF boost pour query
+    tf_prompt, query_vec = apply_tfidf_sort(query, embedder)
 
-    # Embedding de la query et normalisation
-    query_vector = embedder.encode([query], convert_to_numpy=True)
-    query_vector = normalize(query_vector, axis=1).astype("float32")
+    # ---------------- Fusion avec historique
+    filtered_history = history_handler.filter_relevant_history(user_ip, query)
+    if filtered_history:
+        hist_vecs = sk_normalize(embedder.encode(filtered_history, convert_to_numpy=True), axis=1)
+        hist_mean = np.mean(hist_vecs, axis=0, keepdims=True)
+        hist_w = min(0.5, len(filtered_history)/10)
+        query_vec = sk_normalize(query_weight * query_vec + (1 - hist_w) * hist_mean, axis=1)
 
-    # Recherche FAISS
-    scores, indices = index.search(query_vector, top_k)
+    # ---------------- Metadata boost
+        # query_vec = augment_query_with_metadata(query_vec, query, metadata, embedder)
 
+    # ---------------- FAISS retrieval sur tout le corpus
+    query_vec = project_to_768(query_vec)
+    query_vec = sk_normalize(query_vec, axis=1)
+    sims, indices = index.search(query_vec, top_k)
+    faiss_scores, _, _, _ = ultra_reranker_scores(sims[0])
+
+    # ---------------- BM25 rerank sur les résultats FAISS
+    candidate_chunks = [chunks[i] for i in indices[0]]
+    candidate_metadata = [metadata[i] for i in indices[0]]
+
+    tokenized_candidates = [re.findall(r"\b[a-zA-Z0-9éèêàùôîç]+\b", c.lower()) for c in candidate_chunks]
+    bm25 = BM25Okapi(tokenized_candidates)
+    query_tokens = re.findall(r"\b[a-zA-Z0-9éèêàùôîç]+\b", tf_prompt.lower())
+    bm25_scores = bm25.get_scores(query_tokens)
+
+    # Normalisation BM25
+    bm25_scores = bm25_scores / (bm25_scores.max() + 1e-10)
+
+    # ---------------- Combinaison FAISS + BM25
+    combined_scores = 0.7 * faiss_scores + 0.3 * bm25_scores
+
+    # ---------------- Construction des résultats
     results = []
-
-    for dist, idx in zip(scores[0], indices[0]):
-        if idx >= len(chunks):
-            continue
-       
-        alpha = 1.0
-        score = math.exp(-alpha * dist) # lissage exp 0-1
-        
-        print("score:", score, "doc:", metadata[idx]["source"])
-        if score >= min_score:  #  plus le score est proche de 1 plus la prediction est bonne ! 
+    for score, chunk, meta in zip(combined_scores, candidate_chunks, candidate_metadata):
+        if score >= Config.RAG_MIN_SCORE:
             results.append({
-                "text": chunks[idx],
-                "metadata": metadata[idx],
+                "text": chunk,
+                "metadata": meta,
                 "score": float(score)
             })
+            print(f"[ADD] {meta.get('source','-')} score_combined: {score:.6f}")
 
+    results = sorted(results, key=lambda x: x["score"], reverse=True)
     return results
