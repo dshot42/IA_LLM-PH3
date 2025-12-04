@@ -69,6 +69,7 @@ pygments==2.19.2
 nncf==2.18.0
 pydantic==2.12.4
 pydantic-settings==2.12.0
+psycopg2-binary==2.9.11
 python-dateutil==2.9.0.post0
 openai==2.8.1
 aiohappyeyeballs==2.6.1

@@ -4,7 +4,6 @@ from sklearn.preprocessing import normalize as sk_normalize
 import faiss
 from config import Config
 import history_handler
-from rank_bm25 import BM25Okapi
 
 # 🔹 Paramètres
 INDEX_FILE = os.path.join(Config.INDEX_FAISS, "faiss_index.idx")
@@ -51,6 +50,7 @@ def save_faiss_index(index, chunks, metadata):
     faiss.write_index(index, INDEX_FILE)
     with open(META_FILE, "wb") as f:
         pickle.dump({"chunks": chunks, "metadata": metadata}, f)
+    print(f"Index FAISS sauvegardé dans {INDEX_FILE}")
 
 def build_faiss_index(chunks, metadata):
     if not chunks:
@@ -230,7 +230,7 @@ import numpy as np
 from sklearn.preprocessing import normalize as sk_normalize
 
 def retrieve(user_ip: str, query: str, top_k: int = Config.nb_chunks_to_use, query_weight: float = 1):
-    print("--- FAISS first → BM25 rerank ---")
+    print("--- FAISS →  filtrage fin with BM25 rerank ---")
     chunks, metadata, embedder, index = load_faiss_index()
     if not embedder or not chunks or not index:
         return []
@@ -247,7 +247,7 @@ def retrieve(user_ip: str, query: str, top_k: int = Config.nb_chunks_to_use, que
         query_vec = sk_normalize(query_weight * query_vec + (1 - hist_w) * hist_mean, axis=1)
 
     # ---------------- Metadata boost
-        # query_vec = augment_query_with_metadata(query_vec, query, metadata, embedder)
+    query_vec = augment_query_with_metadata(query_vec, query, metadata, embedder)
 
     # ---------------- FAISS retrieval sur tout le corpus
     query_vec = project_to_768(query_vec)
@@ -264,15 +264,17 @@ def retrieve(user_ip: str, query: str, top_k: int = Config.nb_chunks_to_use, que
     query_tokens = re.findall(r"\b[a-zA-Z0-9éèêàùôîç]+\b", tf_prompt.lower())
     bm25_scores = bm25.get_scores(query_tokens)
 
-    # Normalisation BM25
+    # ---------------- Normalisation BM25
     bm25_scores = bm25_scores / (bm25_scores.max() + 1e-10)
 
     # ---------------- Combinaison FAISS + BM25
     combined_scores = 0.7 * faiss_scores + 0.3 * bm25_scores
 
     # ---------------- Construction des résultats
+    
     results = []
     for score, chunk, meta in zip(combined_scores, candidate_chunks, candidate_metadata):
+        #print(f"[RESULT] {meta.get('source','-')} score_combined: {score:.6f}")
         if score >= Config.RAG_MIN_SCORE:
             results.append({
                 "text": chunk,

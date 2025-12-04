@@ -15,7 +15,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding-top: 40px;
+        padding-top: 30px;
 		background-color: #ededed;
     }
     #tabs {
@@ -25,9 +25,6 @@
 	
 	#nav-logo {
 	  margin-bottom: 20px;
-        width: 90vw;
-        max-width:500px;
-	  height: 100px;
 	  border-radius: 10px;
 	  background: linear-gradient(
 		to right,
@@ -61,7 +58,7 @@
     }
     #chatbot-block {
     width: 90vw;
-    max-width:500px;
+
     margin:"30px";
     position: relative;
     padding: 3px; /* épaisseur de la bordure */
@@ -79,7 +76,7 @@
 
     #chatbox {
         width: auto;
-        height: 400px;
+        height: 450px;
         overflow-y: auto;
         border-radius: 10px;
         background: #fff;
@@ -104,10 +101,11 @@
         color: #333;
         margin-right: auto;
     }
-    #inputArea{
+    #inputArea,#searchFilter{
         display: flex;
         width: 90vw;
-        max-width:500px;
+        max-width:800px;
+        margin:auto;
         margin-top: 10px;
     }
     textarea {
@@ -193,7 +191,7 @@
   <!-- Logo + Nom -->
   <div class="flex items-center space-x-3" style="margin:auto;">
     <!-- Logo (SVG simple) -->
-	<img src="./image/logo2.png" style=" width:auto; height: 70px; ">
+	<img src="./image/logo2.png" style=" width:auto; height: 60px; ">
     <span class="text-xl font-bold tracking-wide"> AUTO Pilote</span>
   </div>
 
@@ -214,13 +212,18 @@
             </svg>
             <input type="file" class="file-input" id="fileInput" />
         </button>
+ 
         <button id="sendBtn" class="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition">
         <!-- Icône trombone -->
-        <span>Envoyer</span>
+            <span>Envoyer</span>
         </button>
 	</div>
-
-
+    <div id="searchFilter" style=" margin-top:10px; ">
+        <label>
+            <input type="checkbox" id="sqlSwitch">
+                SQL Request
+        </label>
+    </div>
 </div>
 
 <script>
@@ -229,7 +232,8 @@ const chatTab = document.getElementById("chatTab");
 const instrTab = document.getElementById("instrTab");
 const chatbox = document.getElementById("chatbox");
 const inputArea = document.getElementById("inputArea");
-const host ="192.168.1.20" // localhost
+const host ="192.168.1.24" // localhost . ipconfig ipv4 
+const sqlSwitch = document.getElementById("sqlSwitch");
 
 
 // Ajouter message
@@ -238,6 +242,93 @@ function addMessage(text, sender, box) {
     const div = document.createElement("div");
     div.className = "msg " + sender;
     div.textContent = text;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function addScriptMessageOld(text, sender, box) {
+    const chat = box;
+
+    const div = document.createElement("div");
+    div.className = "msg " + sender;
+
+    // Parser le HTML
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = text;
+
+    // Copier le HTML sans les scripts
+    const scripts = tempDiv.querySelectorAll("script");
+    scripts.forEach(s => s.remove());
+
+    div.innerHTML = tempDiv.innerHTML;
+    chat.appendChild(div);
+
+    // Exécuter les scripts trouvés
+    scripts.forEach(oldScript => {
+        const newScript = document.createElement("script");
+
+        if (oldScript.src) {
+            // Script externe
+            newScript.src = oldScript.src;
+        } else {
+            // Script inline
+            newScript.textContent = oldScript.textContent;
+        }
+
+        document.body.appendChild(newScript);
+        document.body.removeChild(newScript);
+    });
+}
+
+function addSQLMessage(data, sender, box) {
+    const chat = box;
+    const div = document.createElement("div");
+    div.className = "msg " + sender;
+    console.log("SQL Data:", data);
+
+    // Vérifie si data contient header et content
+    if (data && data.header && data.content) {
+        // Crée un tableau HTML
+        const table = document.createElement("table");
+        table.style.borderCollapse = "collapse";
+        table.style.width = "100%";
+        table.style.marginTop = "5px";
+
+        // Header
+        const thead = document.createElement("thead");
+        const headerRow = document.createElement("tr");
+        data.header.forEach(col => {
+            const th = document.createElement("th");
+            th.textContent = col;
+            th.style.border = "1px solid #ccc";
+            th.style.padding = "4px";
+            th.style.backgroundColor = "#f0f0f0";
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        // Content
+        const tbody = document.createElement("tbody");
+        data.content.forEach(row => {
+            const tr = document.createElement("tr");
+            data.header.forEach(col => {
+                const td = document.createElement("td");
+                td.textContent = row[col] !== undefined ? row[col] : "";
+                td.style.border = "1px solid #ccc";
+                td.style.padding = "4px";
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+
+        div.appendChild(table);
+    } else {
+        // Sinon affiche simplement le texte
+        div.textContent = data;
+    }
+
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
 }
@@ -286,8 +377,8 @@ function sendMessage() {
     .then(data => {
         chatbox.removeChild(loader);
         const botReply = data.reply;
-        const assistantText = botReply.split("ASSISTANT:")[1]?.trim() || botReply;
-        addMessage(assistantText, "ai", chatbox);
+        const content = botReply.split("ASSISTANT:")[1]?.trim() || botReply;
+        addMessage(content, "ai", chatbox);
     })
     .catch(err => {
         chatbox.removeChild(loader);
@@ -295,14 +386,54 @@ function sendMessage() {
     });
 }
 
+function sendSqlMessage() {
+    const input = document.getElementById("message");
+    const userText = input.value.trim();
+    if (!userText) return;
+
+    addMessage(userText, "user", chatbox);
+    input.value = "";
+
+    const loader = addLoader(chatbox);
+
+    fetch("http://"+host+":11434/api/sql", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: userText })
+    })
+    .then(res => res.json())   
+    .then(data => {
+        chatbox.removeChild(loader);
+        addSQLMessage(data, "ai", chatbox);
+    })
+    .catch(err => {
+        addMessage("Erreur : " + err, "ai", chatbox);
+        chatbox.removeChild(loader);
+    });
+}
 
 
 // Listeners
-document.getElementById("sendBtn").addEventListener("click", sendMessage);
+document.getElementById("sendBtn").addEventListener("click", e => {  
+       console.log("SQL Switch is ", sqlSwitch.checked);
+       if (sqlSwitch.checked) {
+            sendSqlMessage(); 
+    }
+    else {
+        sendMessage();
+    }
+});
+
 document.getElementById("message").addEventListener("keypress", e => {
     if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        sendMessage();
+        console.log("SQL Switch is ", sqlSwitch.checked);
+        if (sqlSwitch.checked) {
+             sendSqlMessage(); 
+        }
+        else {
+           sendMessage();
+        }
     }
 });
 
@@ -350,8 +481,8 @@ function fileLoader() {
                     .then(res => res.json())
                     .then(data => {
                         chatbox.removeChild(loader);
-                          const botReply = data.reply;
-                         const assistantText = botReply.split("ASSISTANT:")[1]?.trim() || botReply;
+                        const botReply = data.reply;
+                         const assistantText = botReply.trim() || botReply;
                         addMessage(assistantText, "ai", chatbox);
                     })
                     .catch(err => {

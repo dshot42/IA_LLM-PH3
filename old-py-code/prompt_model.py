@@ -42,7 +42,7 @@ class PhiChat:
             outputs = self.model.generate(
                 **inputs,
                 max_new_tokens=max_new_tokens,
-                do_sample=True,
+                do_sample=False,
                 temperature=temperature,
                 top_p=top_p,
                 pad_token_id=self.tokenizer.pad_token_id

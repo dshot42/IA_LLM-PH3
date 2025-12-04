@@ -1,11 +1,12 @@
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import model as model_utils
 import eval
 from config import Config
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import history_handler
+from sql_handler import Database
 
 # === Flask ===
 app = Flask(__name__)
@@ -13,7 +14,7 @@ CORS(app)
 
 # === Routes ===
 @app.route("/api/generate", methods=["POST"])
-def generate():
+def generate_faiss_prompt():
     user_ip = get_user_ip(request)
     data = request.get_json()
     prompt = data.get("prompt", "")
@@ -21,8 +22,19 @@ def generate():
     response_text = eval.faiss_search(user_ip, prompt, model, tokenizer)
     return jsonify({"reply": response_text})
 
+@app.route("/api/sql", methods=["POST"])
+def generate_sql_prompt():
+    user_ip = get_user_ip(request)
+    data = request.get_json()
+    prompt = data.get("prompt", "")
+    print("prompt : " + prompt)
+    db = Database()
+    response_text = db.prompt_sql_query(user_ip, prompt, model, tokenizer)
+    return Response(response_text, mimetype="text/plain")
+
+        
 @app.route("/api/prompt/image", methods=["POST"])
-def image():
+def generate_image_prompt():
     user_ip = get_user_ip(request)
     data = request.get_json()
     prompt = data.get("prompt", "")
@@ -40,15 +52,8 @@ def get_user_ip(request):
     return user_ip
 
 
-# === Main ===
-if __name__ == "__main__":
-    # === Charger le tokenizer et le modèle une seule fois ===
-    print(" --- Loading Models...")
-    tokenizer = model_utils.load_tokenizer()
-    #model = model_utils.load_model_with_qlora()
-        
-    model = model_utils.load_standard_model()
-    
+
+def test_prompt ():
     query = "quel est le numero france travail de monsieur dubost come "
     print("prompt : " + query) 
     response_text = eval.faiss_search("none", query, model, tokenizer)
@@ -71,4 +76,14 @@ if __name__ == "__main__":
     response_text = eval.faiss_search("none", query, model, tokenizer) 
     # attendu : aucun faiss trouvé -> prompt sur LLM ou recherche internet
 
+
+
+# === Main ===
+if __name__ == "__main__":
+    # === Charger le tokenizer et le modèle une seule fois ===
+    print(" --- Loading Models...")
+    tokenizer = model_utils.load_tokenizer()
+    #model = model_utils.load_model_with_qlora()       
+    model = model_utils.load_standard_model()
+    
     app.run(host="0.0.0.0", port=11434)

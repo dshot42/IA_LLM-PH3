@@ -87,29 +87,27 @@ def faiss_search(user_ip, query, model, tokenizer):
 
     Question actuelle : 
     {query}
+    
+    
+    ⚠️ Ne renvoie **aucune explication**, aucune répétition, aucun commentaire, aucune mise en forme Markdown. 
     """.strip()
     return prompt_query(user_ip, prompt, model, tokenizer, with_context=True)
 
 
 def prompt_query(user_ip,prompt, model, tokenizer,with_context=False):
     
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    
     history = history_handler.filter_relevant_history(user_ip, prompt)  # cherche dans l'historique si contexte pertiant au prompt
 
     history_handler.add_user_query(user_ip,prompt)   
     
-
     # Formater l'historique en texte
-
                 
     history_text = ""
     if history:
         history_text = "Historique des échanges :\n"
         for i, h in enumerate(history, 1):
             history_text += f"{i}. {h}\n"
-
-    
+  
     if with_context == False:
         web_results = web_search_handler.searchWeb(prompt)
         context_text = ""
@@ -131,13 +129,18 @@ def prompt_query(user_ip,prompt, model, tokenizer,with_context=False):
         
         Question actuelle:
         {prompt}
+        
+        ⚠️ Ne renvoie **aucune explication**, aucune répétition, aucun commentaire, aucune mise en forme Markdown. 
         """
+        
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device) # important 
+   
     def run_generation():
         with torch.no_grad():
             return model.generate(
                 **inputs,
                 max_new_tokens=Config.MAX_OUTPUT_TOKEN,
-                do_sample=True,
+                do_sample=False,
                 top_p=Config.TOP_P,   
                 top_k=Config.TOP_K, 
                 temperature=Config.TEMPERATURE
@@ -152,3 +155,4 @@ def prompt_query(user_ip,prompt, model, tokenizer,with_context=False):
             return decoded[len(prompt):].strip()
         except TimeoutError:
             return f"⏱️ La génération a dépassé le délai imparti ({Config.SERVER_TIMEOUT} sec)"
+        

@@ -19,10 +19,81 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # ================= Smart chunking =================
 
-# ================= Smart chunking =================
 
+def smart_chunk_json(data, model_name, max_tokens=512):
+    """
+    Découpe un JSON (dict/list) en chunks robustes pour RAG.
+    - Découpe par paires clé/valeur ou objets d'un tableau
+    - Évite de couper à l'intérieur d'un champ
+    - Fallback sur découpe par tokens si segment trop long
+    """
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    chunks = []
 
-def smart_chunk(text, model_name="BAAI/bge-base-en-v1.5", max_tokens=512):
+    # -----------------------------
+    # 1. Si c'est déjà du texte -> parse
+    # -----------------------------
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except:
+            # fallback brut
+            return [data]
+    
+    # -----------------------------
+    # 2. Si c'est un dictionnaire
+    # -----------------------------
+    if isinstance(data, dict):
+        for key, value in data.items():
+            segment = json.dumps({key: value}, indent=2, ensure_ascii=False)
+
+            tokens = tokenizer.encode(segment, add_special_tokens=False)
+            if len(tokens) <= max_tokens:
+                chunks.append(segment)
+            else:
+                # découpe fine
+                chunks.extend(smart_chunk_json(value, model_name, max_tokens))
+        return chunks
+
+    # -----------------------------
+    # 3. Si c'est un tableau JSON
+    # -----------------------------
+    if isinstance(data, list):
+        for item in data:
+            segment = json.dumps(item, indent=2, ensure_ascii=False)
+
+            tokens = tokenizer.encode(segment, add_special_tokens=False)
+            if len(tokens) <= max_tokens:
+                chunks.append(segment)
+            else:
+                # trop long -> re-chunk l'objet interne
+                chunks.extend(smart_chunk_json(item, model_name, max_tokens))
+        return chunks
+
+    # -----------------------------
+    # 4. Types primitifs : str, int, bool
+    # -----------------------------
+    segment = json.dumps(data, ensure_ascii=False)
+    tokens = tokenizer.encode(segment, add_special_tokens=False)
+
+    if len(tokens) <= max_tokens:
+        return [segment]
+
+    # fallback extrême si un champ JSON très long (rare)
+    # découpe par tokens brut
+    res = []
+    start = 0
+    while start < len(tokens):
+        end = min(start + max_tokens, len(tokens))
+        chunk_tokens = tokens[start:end]
+        chunk_text = tokenizer.decode(chunk_tokens, clean_up_tokenization_spaces=True)
+        res.append(chunk_text.strip())
+        start = end
+
+    return res
+
+def smart_chunk(text, model_name=Config.RAG_MODEL, max_tokens=512):
     """
     Découpe un texte en chunks <= max_tokens.
     - Découpe d'abord par retour à la ligne (\n), fin de phrase (.) et point-virgule (;)
@@ -46,7 +117,7 @@ def smart_chunk(text, model_name="BAAI/bge-base-en-v1.5", max_tokens=512):
     for seg in raw_segments:
         try:
             tokens = tokenizer.encode(seg, add_special_tokens=False)
-        except Exception as e:
+        except Exception as e: # si limite > a 512 tokens on split autrement
             print(f"[WARN] Erreur encodage: {e}, découpage par virgule appliqué.")
             # Si le tokenizer lève une erreur, on redécoupe par virgule
             sub_segments = [s.strip() for s in seg.split(".") if s.strip()]
@@ -81,6 +152,25 @@ def smart_chunk(text, model_name="BAAI/bge-base-en-v1.5", max_tokens=512):
     return chunks
 
 
+def smart_chunk_auto(content, filename="", model_name=Config.RAG_MODEL, max_tokens=512):
+    """
+    Détecte le type de contenu et applique le chunking approprié.
+    - JSON : smart_chunk_json
+    - TXT / PDF / DOCX / CSV / XLSX / etc : smart_chunk classique
+    """
+    # JSON détecté par extension
+    if filename.lower().endswith(".json"):
+        try:
+            if isinstance(content, str):
+                data = json.loads(content)
+            else:
+                data = content
+            return smart_chunk_json(data, model_name=model_name, max_tokens=max_tokens)
+        except Exception as e:
+            print(f"[WARN] JSON parsing failed for {filename}: {e}")
+            return smart_chunk(content, model_name=model_name, max_tokens=max_tokens)
+    else:
+        return smart_chunk(content, model_name=model_name, max_tokens=max_tokens)
 
 
 # ================= Scrap web pages =================
@@ -100,7 +190,14 @@ async def scrap_page(url, start_url, to_visit, visited, documents, all_chunks, m
 
         # Découpage par blocs HTML structurants
         text_blocks = []
-        for tag in soup.find_all(["p","table", "h1", "h2", "h3", "h4", "h5", "h6", "div","section"]):
+        for tag in soup.find_all( [
+            "p", "table", "tr", "td", "th",
+            "h1", "h2", "h3", "h4", "h5", "h6",
+            "div", "section", "article", "aside", "main",
+            "ul", "ol", "li",
+            "pre", "code", "blockquote",
+            "span"
+        ]):
             txt = tag.get_text(" ", strip=True)
             if txt and len(txt.split()) >= 5:  # ignorer les blocs trop courts
                 # Limite par caractères avant smart_chunk
@@ -112,7 +209,7 @@ async def scrap_page(url, start_url, to_visit, visited, documents, all_chunks, m
         # Application du smart_chunk sur chaque bloc
         for b in text_blocks:
             try:
-                for idx, chunk in enumerate(smart_chunk(b)):
+                for idx, chunk in enumerate(smart_chunk_auto(b,url)):
                     all_chunks.append(chunk)
                     metadata.append({
                         "type": "web",
@@ -171,13 +268,15 @@ def chunk_documents_from_archive():
             file_path = os.path.join(root, filename)
             try:
                 text = ""
-                if filename.lower().endswith(".pdf"):
-                    reader = PdfReader(file_path)
-                    for page in reader.pages:
-                        text += (page.extract_text() or "") + "\n"
-                elif filename.lower().endswith(".txt"):
+                if filename.lower().endswith((".txt", ".sql",".log", ".md",".json")):
                     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                         text = f.read()
+                elif filename.lower().endswith(".pdf"):
+                    reader = PdfReader(file_path)
+                    for page in reader.pages:             
+                        page_text = page.extract_text()
+                        if page_text:
+                            text += page_text + "\n"
                 elif filename.lower().endswith(".docx"):
                     doc = Document(file_path)
                     text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
@@ -199,7 +298,7 @@ def chunk_documents_from_archive():
                 if not text.strip():
                     continue
 
-                chunks = smart_chunk(text)
+                chunks = smart_chunk_auto(text,filename=filename)
                 for idx, chunk in enumerate(chunks):
                     all_chunks.append(chunk)
                     metadata.append({
@@ -218,27 +317,33 @@ def chunk_documents_from_archive():
 
 def main():
     # Web scraping
+
+
+    # Local archive documents
+    all_chunks_local, metadata_local = chunk_documents_from_archive()
+    if all_chunks_local:
+        chunks, metadata, embedder, index = faiss_handler.faiss_index_handler(all_chunks_local, metadata_local)    
+        print("Indexation locale...")
+
+    ''' 
+     # Web pages   
     documents_web, all_chunks_web, metadata_web = asyncio.run(scrap_web_ressource())
     if all_chunks_web:
         print("Indexation web...")
         chunks, metadata, embedder, index = faiss_handler.faiss_index_handler(all_chunks_web, metadata_web)
-
-    # Local archive
-    all_chunks_local, metadata_local = chunk_documents_from_archive()
-    if all_chunks_local:
-        print("Indexation locale...")
-        chunks, metadata, embedder, index = faiss_handler.faiss_index_handler(all_chunks_local, metadata_local)
+    '''     
+    print ("--- SUCCESS faiss archive persist---")
 
     # Test search
-    query = "quel est le numero france travail de monsieur dubost"
-    query_chunks = smart_chunk(query)  # chunk query <=512 tokens
-    results = []
-    for chunk in query_chunks:
-        results.extend(faiss_handler.retrieve("none", chunk))
+    query = "y a t'il eu des error sur la machine PLC suivant le Workflow industriel - Ligne de production PLC ?"
 
+    results = faiss_handler.retrieve("none", query)  # récupère une liste
     for r in results:
+        # Tronquer le texte pour l'affichage
         text_clean = r['text'][:180].replace("\n", " ")
-        print(f"[{r['score']:.3f}] {r['metadata'].get('source','-')} - {text_clean}...")
+        source = r['metadata'].get('source', '-')
+        print(f"[{r['score']:.3f}] {source} - {text_clean}...")
+
 
 if __name__ == "__main__":
     main()

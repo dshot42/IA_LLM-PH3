@@ -20,15 +20,17 @@ class BaseConfig(object):
     EPOCHS = 1
     BATCH_SIZE = 2
     LEARNING_RATE = 2e-5
-    MAX_OUTPUT_TOKEN = 300 # / 50 pour test uniquement
-    TOP_P = 0.9
-    TEMPERATURE = 0.7 # plus pertinant en RAG
-    TOP_K=40
+    MAX_OUTPUT_TOKEN = 300 # / 200  pour test uniquement
+
+    TEMPERATURE = 0.0 # plus pertinant en RAG
+    TOP_K = 1
+    TOP_P = 0
     
     ''' POUR RAG
-    TOP_P =0.85
-    TEMPERATURE = 0.2 # plus pertinant en RAG
-    TOP_K=40
+    TEMPERATURE = 0.0 # plus pertinant en RAG
+    TOP_K = 1
+    TOP_P = 0
+    
     
     default 
     TOP_P = 0.9
@@ -42,7 +44,7 @@ class BaseConfig(object):
     
     ####### RAG #######
     RAG_MODEL = "./models/bge" # pour le embeded  "./models/bge" "BAAI/bge-base-en-v1.5"
-    RAG_ARCHIVE_PATH = "./RAG/archive"    
+    RAG_ARCHIVE_PATH = "./RAG/archive/"    
     INDEX_FAISS = "./models/FAISS/"
     RAG_WEB_ARCHIVE_PATH="./RAG/web_ressources"
     CHUNK_SIZE=500 # taille des chunks de doc pour FAISS 
@@ -51,6 +53,6 @@ class BaseConfig(object):
     #on prend en compte les X meilleurs chunks  
     #et on check si > RAG_MIN_SCORE pour la reponse RAG avant prompt a mon model LLM, 5 à 10 pour gros LLM 7B
     
-    SERVER_TIMEOUT=200 # 200 sec par default
+    SERVER_TIMEOUT=2000 # 200 sec par default
 
 Config = BaseConfig
