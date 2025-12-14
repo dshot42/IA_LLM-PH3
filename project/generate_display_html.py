@@ -2,10 +2,8 @@
 
 import torch
 from config import Config
-from transformers import Blip2Processor, Blip2ForConditionalGeneration
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import re
-import json
 
 def prompt_on_sql_data(user_ip, initial_user_query, sql_data, schema_sql, model, tokenizer):
     

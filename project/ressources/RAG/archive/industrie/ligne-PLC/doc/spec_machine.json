@@ -1,0 +1,59 @@
+{
+  "production_line": {
+    "machines": [
+      {
+        "id": "M1",
+        "name": "Préparation des matières premières",
+        "steps": [
+          {"id": "1.1", "name": "Chargement matières premières"},
+          {"id": "1.2", "name": "Dosage automatique"},
+          {"id": "1.3", "name": "Mélange initial"},
+          {"id": "1.4", "name": "Transfert vers Machine 2"}
+        ],
+        "errors": [
+          {"code": "ERROR_NO_MATERIAL", "description": "Absence de matières premières détectée"},
+          {"code": "ERROR_DOSAGE_OVERFLOW", "description": "Surdosage ou débordement lors du dosage"},
+          {"code": "ERROR_MIXER_FAILURE", "description": "Agitateur bloqué ou moteur défaillant"},
+          {"code": "ERROR_TRANSFER_BLOCKED", "description": "Convoyeur vers Machine 2 bloqué ou capteur non activé"}
+        ]
+      },
+      {
+        "id": "M2",
+        "name": "Transformation intermédiaire",
+        "steps": [
+          {"id": "2.1", "name": "Réception du lot"},
+          {"id": "2.2", "name": "Chauffage / traitement thermique"},
+          {"id": "2.3", "name": "Refroidissement"},
+          {"id": "2.4", "name": "Contrôle qualité intermédiaire"},
+          {"id": "2.5", "name": "Transfert vers Machine 3"}
+        ],
+        "errors": [
+          {"code": "ERROR_NO_INPUT", "description": "Aucun lot reçu depuis Machine 1"},
+          {"code": "ERROR_HEATER_OVERLOAD", "description": "Température trop élevée ou résistance défaillante"},
+          {"code": "ERROR_COOLING_FAILURE", "description": "Système de refroidissement non opérationnel"},
+          {"code": "ERROR_QUALITY_FAIL", "description": "Contrôle qualité non conforme"},
+          {"code": "ERROR_CONVEYOR_BLOCKED", "description": "Convoyeur vers Machine 3 bloqué ou désynchronisé"}
+        ]
+      },
+      {
+        "id": "M3",
+        "name": "Conditionnement final",
+        "steps": [
+          {"id": "3.1", "name": "Réception du lot"},
+          {"id": "3.2", "name": "Remplissage automatique"},
+          {"id": "3.3", "name": "Fermeture / scellage"},
+          {"id": "3.4", "name": "Étiquetage"},
+          {"id": "3.5", "name": "Palettisation / sortie ligne"}
+        ],
+        "errors": [
+          {"code": "WAITING_NO_INPUT", "description": "aucune reponse de la Machine 2"},
+          {"code": "ERROR_NO_PRODUCT", "description": "Aucun lot reçu depuis Machine 2"},
+          {"code": "ERROR_FILLING_MISDOSE", "description": "Mauvais dosage lors du remplissage"},
+          {"code": "ERROR_SEALING_FAILURE", "description": "Défaut de scellage"},
+          {"code": "ERROR_LABEL_MISSING", "description": "Étiquette non appliquée ou mal positionnée"},
+          {"code": "ERROR_PALLET_JAM", "description": "Blocage du système de palettisation"}
+        ]
+      }
+    ]
+  }
+}

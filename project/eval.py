@@ -77,62 +77,26 @@ def faiss_search(user_ip, query, model, tokenizer):
 
     # Prompt final
     prompt = f"""
-    Tu es un assistant français RAG. Tu dois répondre uniquement à partir du contexte fourni.
-    Ne répète jamais le texte original, synthétise uniquement l'information utile.
-    Ne génère pas de questions, juste une réponse concise et précise.
-    Réponse courte et précise, maximum {Config.MAX_OUTPUT_TOKEN} tokens.
-    
-    Contexte RAG:
+    Tu es un assistant français RAG. Tu dois répondre UNIQUEMENT à partir du contexte ci-dessous.
+    Aucune information extérieure ne doit être ajoutée.
+
+    === Contexte ===
     {context}
 
-    Question actuelle : 
+    === Question ===
     {query}
-    
-    
-    ⚠️ Ne renvoie **aucune explication**, aucune répétition, aucun commentaire, aucune mise en forme Markdown. 
-    """.strip()
-    return prompt_query(user_ip, prompt, model, tokenizer, with_context=True)
 
+    === Instructions ===
+    - Répondre de manière directe, nette et concise.
+    - Ne jamais répéter le contexte ou reformuler la question.
+    - Ne pas expliquer ta démarche.
+    - Ne pas ajouter de détails non présents dans le contexte.
+    - Ne pas utiliser de Markdown.
+    - Réponse strictement informative, sans redondance.
+    - Ne produire qu’un seul paragraphe si possible.
+    """
 
-def prompt_query(user_ip,prompt, model, tokenizer,with_context=False):
-    
-    history = history_handler.filter_relevant_history(user_ip, prompt)  # cherche dans l'historique si contexte pertiant au prompt
-
-    history_handler.add_user_query(user_ip,prompt)   
-    
-    # Formater l'historique en texte
-                
-    history_text = ""
-    if history:
-        history_text = "Historique des échanges :\n"
-        for i, h in enumerate(history, 1):
-            history_text += f"{i}. {h}\n"
-  
-    if with_context == False:
-        web_results = web_search_handler.searchWeb(prompt)
-        context_text = ""
-        if web_results:
-            context_text = "Contexte Web (extraits pertinents) :\n"
-            for i, r in enumerate(web_results, 1):
-                context_text += f"{i}. {r['title']} | {r['url']}\n"
-                if r['snippet']:
-                    context_text += f"   {r['snippet']}\n"
-                    
-        prompt = f"""
-        Tu es un assistant intelligent en français.
-        Ne génère pas de questions, juste une réponse concise et précise.
-        Réponse courte, claire et précise, en maximum {Config.MAX_OUTPUT_TOKEN} tokens.
-
-        {'Historique des prompt :' + history_text if history_text else ''} 
-        
-        {'Contexte WEB: ' + context_text if context_text else ''}
-        
-        Question actuelle:
-        {prompt}
-        
-        ⚠️ Ne renvoie **aucune explication**, aucune répétition, aucun commentaire, aucune mise en forme Markdown. 
-        """
-        
+   
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device) # important 
    
     def run_generation():
@@ -141,6 +105,80 @@ def prompt_query(user_ip,prompt, model, tokenizer,with_context=False):
                 **inputs,
                 max_new_tokens=Config.MAX_OUTPUT_TOKEN,
                 do_sample=False,
+                top_p=Config.TOP_P,   
+                top_k=Config.TOP_K, 
+                temperature=Config.TEMPERATURE,
+                repetition_penalty=1.08,
+                no_repeat_ngram_size=3
+            )
+
+    with ThreadPoolExecutor() as executor:
+        future = executor.submit(run_generation)
+        try:
+            output = future.result(timeout=Config.SERVER_TIMEOUT)  # timeout
+            decoded = tokenizer.decode(output[0], skip_special_tokens=True)
+            print("### result : " +decoded[len(prompt):].strip())
+            return decoded[len(prompt):].strip()
+        except TimeoutError:
+            return f"⏱️ La génération a dépassé le délai imparti ({Config.SERVER_TIMEOUT} sec)"
+        
+
+def prompt_query(user_ip, query, model, tokenizer):
+    
+    history = history_handler.filter_relevant_history(user_ip, query)  # cherche dans l'historique si contexte pertiant au prompt
+
+    history_handler.add_user_query(user_ip,query)   
+    
+    # Formater l'historique en texte
+                
+    history_text = ""
+    if history:
+        history_text = "Historique des échanges :\n"
+        for i, h in enumerate(history, 1):
+            history_text += f"{i}. {h}\n"
+
+    web_results = web_search_handler.searchWeb(query)
+    context_text = ""
+    if web_results:
+        context_text = "Contexte Web pertinent :\n"
+        for i, r in enumerate(web_results, 1):
+            context_text += f"{i}. {r['title']} | {r['url']}\n"
+            if r.get('snippet'):
+                context_text += f"   {r['snippet']}\n"
+
+    final_prompt = f"""
+    Tu es un assistant français. Réponds uniquement à partir de l'historique et du contexte web.
+    Réponse obligatoire : courte, précise, claire, sans reformuler la question.
+
+    Règles strictes :
+    - Ne génère pas de questions.
+    - Ne répète pas la question.
+    - Ne répète pas le contexte web.
+    - Ne mentionne pas l'historique.
+    - Ne fournis aucune explication sur ta démarche.
+    - Ne commente rien.
+    - Pas de Markdown.
+    - Réponse directe uniquement.
+
+    {history_text if history_text else ""}
+
+    {context_text if context_text else ""}
+
+    Question :
+    {query}
+    """
+
+    
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device) # important 
+   
+    def run_generation():
+        with torch.no_grad():
+            return model.generate(
+                **inputs,
+                max_new_tokens=Config.MAX_OUTPUT_TOKEN,
+                do_sample=False,
+                repetition_penalty=1.08,
+                no_repeat_ngram_size=3,
                 top_p=Config.TOP_P,   
                 top_k=Config.TOP_K, 
                 temperature=Config.TEMPERATURE
@@ -156,3 +194,29 @@ def prompt_query(user_ip,prompt, model, tokenizer,with_context=False):
         except TimeoutError:
             return f"⏱️ La génération a dépassé le délai imparti ({Config.SERVER_TIMEOUT} sec)"
         
+        
+def eval_prompt(prompt, model, tokenizer, user_ip="sytem_workflow"):
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device) # important 
+   
+    def run_generation():
+        with torch.no_grad():
+            return model.generate(
+                **inputs,
+                max_new_tokens=Config.MAX_OUTPUT_TOKEN,
+                do_sample=False,
+                top_p=Config.TOP_P,   
+                top_k=Config.TOP_K, 
+                temperature=Config.TEMPERATURE,
+                repetition_penalty=1.08,
+                no_repeat_ngram_size=3
+            )
+
+    with ThreadPoolExecutor() as executor:
+        future = executor.submit(run_generation)
+        try:
+            output = future.result(timeout=2000)  # timeout
+            decoded = tokenizer.decode(output[0], skip_special_tokens=True)
+            print("### result : " +decoded[len(prompt):].strip())
+            return decoded[len(prompt):].strip()
+        except TimeoutError:
+            return f"⏱️ La génération a dépassé le délai imparti ({2000} sec)"

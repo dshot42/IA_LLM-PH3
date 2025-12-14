@@ -1,0 +1,40 @@
+		Commune       :     AURILLAC
+		 
+		Département   :     15 - CANTAL
+		 
+		Altitude           :     Au dessus de 700 mètres
+
+		Environnement climatique des bétons extérieurs non protégés de l'humidité : 2b2
+
+MILIEUX COURANTS SECS						
+Bétons intérieurs non armés	1	NA				
+Planchers et ossatures intérieures armés	1	BA	B22	0,65		
+Murs intérieurs armés	1	BA	B22	0,65		
+Dalle sur vide sanitaire	1	BA	B22	0,65		
+Murs extérieurs armés protégés de la pluie	1	BA	B22	0,65		
+						
+						
+MILIEUX COURANTS HUMIDES						
+Bétons intérieurs non armés - milieu humide 	2a	NA	B16	0,70		
+Bétons intérieurs armés - milieu humide 	2a	BA	B25	0,60		
+Dalle, terrasse, rampe, non armées sur sol non agressif	2b2	NA	B28	0,55	4%	
+Dalle, terrasse, rampe, armées sur sol non agressif	2b2	BA	B30	0,55	4%	
+Balcons et murs extérieurs armés	2b2	BA	B30	0,55	4%	
+Fondation non armée sur sol non agressif	2b2	NA	B28	0,55	4%	
+Fondation armée sur sol non agressif	2b2	BA	B30	0,55	4%	
+Fondation non armée, hors gel, sur sol non agressif	2a	NA	B16	0,70		
+Fondation armée, hors gel, sur sol non agressif	2a	BA	B25	0,60		
+Piscine ou bassin armé avec liner	2b2	BA	B30	0,55	4%	
+						
+						
+SOLS AGRESSIFS ET ATTAQUES CHIMIQUES						
+Bétons armés ou non et faible agressivité (P 18-101)	5a	NA/BA	B32	0,55		PM
+Bétons armés ou non et agressivité moyenne (P 18-101)	5b	NA/BA	B35	0,50		ES
+Bétons armés ou non et agressivité forte (P 18-101)	5c	NA/BA	B40	0,45		ES
+Piscine ou bassin armé sans liner	5a	BA	B32	0,55		PM
+Dalle, terrasse, rampe armées ou non et sel dégivrant	3	NA/BA	B32	0,50	4%	
+						
+						
+						
+
+

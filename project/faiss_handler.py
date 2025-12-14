@@ -12,7 +12,7 @@ DIM = 768  # dimension forcée pour BGE
 
 # ----------------- Préprocessing stopwords -----------------
 def preprocess_stopwords():
-    with open("french_stopwords.json", "r", encoding="utf-8") as f:
+    with open("./ressources/french_stopwords.json", "r", encoding="utf-8") as f:
         stopwords = json.load(f)
     clean = []
     for w in stopwords:
@@ -97,76 +97,89 @@ def faiss_index_handler(new_chunks, new_metadata):
 def apply_tfidf_sort(
         query,
         embedder,
-        min_weight=0.15,
-        boost_factor=3.0,
-        mix_query=0.3,
         stopword_factor=0.05,
+        length_factor=0.12,
+        pos_factor=0.08,
+        rare_factor=0.2,
+        mix_query=0.30,
         mode="sum"
     ):
     """
-    Version améliorée :
-    - pondération TF-IDF stabilisée
-    - stopwords fortement réduits mais pas annulés
-    - encodage batch pour accélérer
-    - poids minimum + softmax pour lisser
-    - blending final intelligent
+    PONDÉRATION SANS CORPUS :
+    - importance = combinaison longueur + rareté + position + non-stopword
+    - self-contained, stable, aucune dépendance extérieure
+    - excellent pour moteurs RAG web
     """
 
-    # 1) Tokenisation propre
-    tokens = re.findall(r"[a-zA-Z0-9éèêàùôîç]+", query.lower())
+    import numpy as np
+    import re
+
+    # -----------------------------
+    # 1) Tokenisation
+    # -----------------------------
+    tokens = re.findall(r"[a-zA-Z0-9éàèùçêôî]+", query.lower())
     if not tokens:
-        return query, embedder.encode([query], convert_to_numpy=True)
+        emb = embedder.encode([query], convert_to_numpy=True)[0]
+        return query, emb
 
     stopwords = set(preprocess_stopwords())
 
-    # 2) TF-IDF
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    vectorizer = TfidfVectorizer(token_pattern=r"[a-zA-Z0-9éèêàùôîç]+")
-    tfidf_scores = vectorizer.fit_transform([" ".join(tokens)]).toarray().flatten()
-    tfidf_dict = dict(zip(vectorizer.get_feature_names_out(), tfidf_scores))
+    # -----------------------------
+    # 2) Embeddings batch
+    # -----------------------------
+    token_emb = embedder.encode(tokens, convert_to_numpy=True)
 
-    # 3) Encodage batch → 10x plus rapide
-    token_embeddings = embedder.encode(tokens, convert_to_numpy=True).astype("float32")
-
-    # 4) Calcul poids
+    # -----------------------------
+    # 3) Pondération SELF-IDF
+    # -----------------------------
     weights = []
-    for tok in tokens:
+    total_tokens = len(tokens)
 
-        if tok in stopwords or len(tok) <= 2:
-            # Faible mais jamais 0
+    for idx, tok in enumerate(tokens):
+
+        # stopword → faible importance
+        if tok in stopwords:
             w = stopword_factor
 
         else:
-            raw_tfidf = tfidf_dict.get(tok, 0.0)
+            # Longueur du mot → plus il est long, plus il est technique
+            w_len = length_factor * (len(tok) / 8)
 
-            # log-smoothing + boost
-            w = min_weight + boost_factor * (1 + np.log1p(raw_tfidf))
+            # Rare = longueur + caractères rares
+            w_rare = rare_factor * sum(1 for c in tok if c not in "aeiounrt")
+
+            # Position : les premiers mots sont souvent les plus importants
+            w_pos = pos_factor * (1 - idx / total_tokens)
+
+            w = w_len + w_rare + w_pos + 0.1  # offset minimum
 
         weights.append(w)
 
     weights = np.array(weights)
 
-    # Normalisation softmax → bonne répartition
+    # Normalisation softmax → stabilité
     weights = np.exp(weights) / np.sum(np.exp(weights))
 
-    # 5) Application des poids
-    weighted_embeddings = token_embeddings * weights[:, None]
+    # -----------------------------
+    # 4) Vecteur pondéré
+    # -----------------------------
+    weighted = token_emb * weights[:, None]
 
-    # 6) Agrégation
     if mode == "sum":
-        vec = np.sum(weighted_embeddings, axis=0, keepdims=True)
+        vec = weighted.sum(axis=0)
     else:
-        vec = np.mean(weighted_embeddings, axis=0, keepdims=True)
+        vec = weighted.mean(axis=0)
 
-    vec = sk_normalize(vec, axis=1).astype("float32")
+    vec = vec / (np.linalg.norm(vec) + 1e-8)
 
-    # 7) Blending final avec embedding du query original
-    query_embed = sk_normalize(embedder.encode([query], convert_to_numpy=True), axis=1)
+    # -----------------------------
+    # 5) Blending avec embedding brut
+    # -----------------------------
+    orig = embedder.encode([query], convert_to_numpy=True)[0]
+    orig = orig / (np.linalg.norm(orig) + 1e-8)
 
-    # Si prompt très long → réduire mix_query
-    adaptive_mix = mix_query * (1 / (1 + len(tokens) / 8))
-
-    vec = sk_normalize((1 - adaptive_mix) * vec + adaptive_mix * query_embed, axis=1)
+    vec = (1 - mix_query) * vec + mix_query * orig
+    vec = vec / (np.linalg.norm(vec) + 1e-8)
 
     return " ".join(tokens), vec
 

@@ -2,7 +2,9 @@
 __pycache__/
 torch_env
 project/__pycache__
-project/models/*
+
 project/lora_model
 token.txt
 project/RAG/archive/document_personnel
+ui-chatbox/auto-pilot/node_modules
+project/ressources/models/*

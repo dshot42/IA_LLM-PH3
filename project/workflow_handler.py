@@ -1,6 +1,18 @@
 import os
-import re
-import eval
+import torch
+import io
+from config import Config
+import faiss_handler
+from PIL import Image
+from transformers import Blip2Processor, Blip2ForConditionalGeneration
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+import base64
+import history_handler
+import  web_search_handler
+import os.path as op
+
+folder_workflow = op.join(Config.RESSOURCES_DIR,"industrie/ligne_PLC-advanced") 
+
 
 def load_workflow_files(folder_path):
     """
@@ -21,84 +33,105 @@ def load_workflow_files(folder_path):
 
     return all_files_content
 
-folder_workflow = "./RAG/archive/industrie/ligne-PLC/" # prompt server http request with ligne name : get folder assigned at ligne  ! 
 
 
-def workflow_search( user_ip, folder, query, model, tokenizer):
-    MAX_CHARS = 10000  # Limite de caractères par section
+def workflow_search( user_ip, racine_folder, query, model, tokenizer):
+    MAX_CHARS = 100000  # Limite de caractères par section
 
     # -----------------------------
     # 1️⃣ Charger tous les fichiers de workflow
     # -----------------------------
-    workflow_folder = os.path.join(folder_workflow, "workflow")
+    workflow_folder = os.path.join(racine_folder, "workflow")
     workflow_files = load_workflow_files(folder_path=workflow_folder)
     workflow_content = "\n".join(workflow_files.values())
 
     # -----------------------------
     # 2️⃣ Charger les documents techniques
     # -----------------------------
-    doc_folder = os.path.join(folder_workflow, "doc")
+    doc_folder = os.path.join(racine_folder, "doc")
     docs_files = load_workflow_files(folder_path=doc_folder)
-    docs_content = "\n".join(docs_files.values())[:MAX_CHARS]
+    docs_content = "\n".join(docs_files.values())
 
     # -----------------------------
     # 3️⃣ Charger les logs et ne garder que les lignes pertinentes
     # -----------------------------
-    log_folder = os.path.join(folder_workflow, "log")
+    log_folder = os.path.join(racine_folder, "log")
     logs_files = load_workflow_files(folder_path=log_folder)
-    relevant_logs = []
-
-    for content in logs_files.values():
-        for line in content.splitlines():
-            if re.search(r"(error|fail|anomaly|warning)", line, re.IGNORECASE):
-                # Extraire date/heure si disponible
-                match = re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", line)
-                date_heure = match.group(0) if match else "date_heure_inconnue"
-                relevant_logs.append(f"{date_heure} : {line}")
-
-    logs_content = "\n".join(relevant_logs)[:MAX_CHARS]
+    logs_content = "\n".join(logs_files.values())
 
     # -----------------------------
     # 4️⃣ Construire le prompt final
     # -----------------------------
     prompt = f"""
-    Tu es un assistant français expert en workflow industriel - machine PLC.
-    Analyse le workflow industriel, les documents techniques des machines et les logs d'exécution fournis.
+    Tu es un assistant français expert en analyse de workflow industriel sur lignes PLC multi-machines.
+    Ta mission : analyser précisément les logs d'exécution en les confrontant strictement au workflow et à la documentation technique. 
+    Aucune information extérieure ne doit être inventée.
 
-    Pour chaque anomalie détectée, renvoie **uniquement** dans ce format strict** :
-
-    date, heure => machine : erreur détectée lors de l'étape Step correspondante à la description "DescriptionErreur" dans la doc technique de la machine concernée
-
-    - Step : étape du workflow où l'erreur apparaît tirée du workflow
-    - date, heure : date et heure exacte tirée des logs
-    - DescriptionErreur : description exacte tirée de la doc technique
-    - machine : nom de la machine concernée tirée du workflow
-
-    Si aucune anomalie n'est détectée, renvoie :
-    aucune anomalie détectée
-
-    Ne fournis aucun autre texte, explication, commentaire ou mise en forme Markdown.
-
-    workflow industriel ligne PLC :
+    === Données disponibles ===
+    Workflow industriel :
     {workflow_content}
 
-    Documents techniques des machines de la ligne PLC :
+    Documentation technique des machines :
     {docs_content}
 
-    Logs de l'execution des machines de la ligne PLC (uniquement lignes pertinentes avec date/heure) :
+    Logs d'exécution (extraits horodatés pertinents) :
     {logs_content}
 
-    Question actuelle :
+    Question :
     {query}
 
-    ⚠️ Réponse stricte comme indiqué ci-dessus.
-    """.strip()
+    === Ce que tu dois produire ===
+    Un compte rendu structuré uniquement sur la base des données fournies, détaillant pour chaque événement concerné par la Question :
 
-    print("### Workflow Prompt :", prompt)
+    - **Machine :** nom de la machine impliquée
+    - **Step :** ID + nom + description officielle tirée de la documentation technique
+    - **Timestamp :** début et fin (selon les logs disponibles)
+    - **Statut :** OK / ERROR / WARNING
+    - **Code erreur :** explication issue de la documentation technique (si disponible)
+    - **Analyse workflow :** 
+        • cohérence par rapport au step attendu  
+        • éventuel dépassement de durée / déphasage entre machines  
+        • anomalie ou transition non conforme au grafcet  
+    - **Impact production :** conséquence possible sur le cycle global
+
+    === Contraintes ===
+    - Ne pas répéter le prompt, les logs, ni le workflow.
+    - Ne générer aucune information absente des données.
+    - Répondre STRICTEMENT à la Question actuelle et pas à autre chose.
+    - Ne commenter que les événements réellement présents dans les logs.
+
+    Réponse attendue : un rapport clair, structuré, concis et orienté terrain.
+    """
+
+
     # -----------------------------
     # 5️⃣ Appel au modèle
     # -----------------------------
-    
-    response = eval.prompt_query(user_ip, prompt, model, tokenizer, with_context=True)
-
+    #print("### workflow prompt : "+ prompt)
+    response = prompt_query(user_ip, prompt, model, tokenizer)
     return response
+
+def prompt_query(user_ip, prompt, model, tokenizer):
+          
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device) # important 
+   
+    def run_generation():
+        with torch.no_grad():
+            return model.generate(
+                **inputs,
+                max_new_tokens=500,
+                do_sample=False,
+                repetition_penalty=1.08,
+                no_repeat_ngram_size=3
+            )
+
+    with ThreadPoolExecutor() as executor:
+        future = executor.submit(run_generation)
+        try:
+            output = future.result(timeout=1000)  # timeout
+            decoded = tokenizer.decode(output[0], skip_special_tokens=True)
+            print("### result : " +decoded[len(prompt):].strip())
+            return decoded[len(prompt):].strip()
+        except TimeoutError:
+            return f"⏱️ La génération a dépassé le délai imparti ({1000} sec)"
+        

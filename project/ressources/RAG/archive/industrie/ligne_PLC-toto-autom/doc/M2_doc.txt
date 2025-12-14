@@ -1,0 +1,2 @@
+E-M2-010: Pick timeout
+E-M2-011: Gripper non fermé

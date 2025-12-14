@@ -1,0 +1,19 @@
+WORKFLOW INDUSTRIEL — VERSION DÉVELOPPÉE
+Ligne : Assemblage mécanique + collage + vissage + contrôle + marquage + palettisation
+Machines : M1 Convoyeur | M2 Robot Pick&Place | M3 Station collage | M4 Station vissage | M5 Vision 2D/3D | M6 Marquage laser | M7 Palettisation
+PLC maître : Siemens S7-1500 + Safety CPU
+Bus : Profinet (segments A/B), IO-Link pour capteurs attachés
+
+Phases :
+ - PHASE 1 : Alimentation (M1 -> M2)
+ - PHASE 2 : Assemblage (M2 -> M3 -> M4)
+ - PHASE 3 : Contrôle qualité (M5)
+ - PHASE 4 : Marquage & traçabilité (M6)
+ - PHASE 5 : Stockage / palettisation (M7)
+
+Cycle nominal complet : 3.6 s (3600 ms)
+Tolérances globales :
+ - Déphasage inter-machine toléré : < 200 ms
+ - Latence Profinet tolérée : <= 8 ms
+ - Jitter acceptable par segment : <= 10 ms
+ - Jitter critique : > 12 ms (alerte), > 20 ms (arrêt recommandé)

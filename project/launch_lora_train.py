@@ -1,5 +1,5 @@
 import argparse
-import data
+import project.import_dataset as import_dataset
 import model as model_utils
 import train
 import eval
@@ -32,7 +32,7 @@ def main(args):
         print(" --- Loading model with QLoRA...")
         model = model_utils.load_model_with_qlora()
 
-    dataset = data.get_dataset()
+    dataset = import_dataset.get_dataset()
 
     print(" --- Starting training...")
     train.train(model, tokenizer, dataset)

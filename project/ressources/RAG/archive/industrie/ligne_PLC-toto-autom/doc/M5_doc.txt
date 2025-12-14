@@ -1,0 +1,2 @@
+E-M5-040: Vision processing timeout
+E-M5-041: Mauvais contraste

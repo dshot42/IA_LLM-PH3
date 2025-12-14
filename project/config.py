@@ -5,10 +5,12 @@ import os.path as op
 class BaseConfig(object):
     BASEDIR = op.abspath(op.dirname(__file__))
     PROJECT_ROOT = BASEDIR
+    
+    RESSOURCES_DIR = op.join(PROJECT_ROOT, "ressources")
 
     DEVICE_MAP="cpu" # cuda , xpu
     #MODEL_NAME ="./models/Phi-3-small-128k-instruct" # CUDA gros model a faire tourner en 4bit ou 8 via GPU
-    MODEL_NAME ="./models/Phi-3-mini-128k-instruct" # CPU "models/phi2-mini| Phi-3-mini-128k-instruct | Llama-3.1-8B"
+    MODEL_NAME = op.join(RESSOURCES_DIR, "models/Phi-3-mini-128k-instruct") # CPU "models/phi2-mini| Phi-3-mini-128k-instruct | Llama-3.1-8B"
 
     TARGET_MODULES = ["self_attn.qkv_proj", "self_attn.o_proj"] #phi3
     #TARGET_MODULES = ["q_proj", "v_proj"] #phi2/qwen  
@@ -40,19 +42,24 @@ class BaseConfig(object):
     '''
     MAX_LENGTH =512 # 512 
 
-    OUTPUT_DIR = "./models/lora/phi3-lora"
+    OUTPUT_DIR =  op.join(RESSOURCES_DIR,"models/lora/phi3-lora")
     
     ####### RAG #######
-    RAG_MODEL = "./models/bge" # pour le embeded  "./models/bge" "BAAI/bge-base-en-v1.5"
-    RAG_ARCHIVE_PATH = "./RAG/archive/"    
-    INDEX_FAISS = "./models/FAISS/"
-    RAG_WEB_ARCHIVE_PATH="./RAG/web_ressources"
+    RAG_MODEL = op.join(RESSOURCES_DIR,"models/bge" )# pour le embeded  "./models/bge" "BAAI/bge-base-en-v1.5"
+    RAG_ARCHIVE_PATH = op.join(RESSOURCES_DIR, "RAG/archive/" )   
+    INDEX_FAISS = op.join(RESSOURCES_DIR,"models/FAISS/") 
+    RAG_WEB_ARCHIVE_PATH= op.join(RESSOURCES_DIR,"RAG/web_ressources") 
     CHUNK_SIZE=500 # taille des chunks de doc pour FAISS 
     RAG_MIN_SCORE=0.8 #seuil min de pertinence pour repondre en RAG 0.7 
     nb_chunks_to_use=1000
     #on prend en compte les X meilleurs chunks  
     #et on check si > RAG_MIN_SCORE pour la reponse RAG avant prompt a mon model LLM, 5 à 10 pour gros LLM 7B
     
-    SERVER_TIMEOUT=2000 # 200 sec par default
+    SERVER_TIMEOUT=200 # 200 sec par default
+    
+    
+    #### WORKFLOW ####
+    folder_workflow = op.join(RESSOURCES_DIR,"industrie/ligne_PLC-advanced/workflow") 
+    rapport_llm_export =  op.join(RESSOURCES_DIR,"rapport_llm_export")
 
 Config = BaseConfig

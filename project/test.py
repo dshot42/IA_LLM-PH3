@@ -51,13 +51,13 @@ if __name__ == "__main__":
     print(" --- Loading Models...")
     tokenizer = model_utils.load_tokenizer()
     model = model_utils.load_standard_model()
-    
-    
-    folder = os.path.join(Config.OUTPUT_DIR, workflow_handler.folder_workflow)
-
-    workflow_handler.workflow_search("none",folder, "y a t'il eu des erreur / anomalie sur les machines de la ligne PLC suivant le Workflow industriel - Ligne de production PLC ?",model, tokenizer)
-
+      
    # test_prompt()
+   
+    folder = os.path.join(Config.PROJECT_ROOT, workflow_handler.folder_workflow)
+    workflow_handler.workflow_search("none",folder, "y a t'il eu des erreur / anomalie sur les machines de la ligne PLC suivant le Workflow industriel ?",model, tokenizer)
+
+
     db = Database()
     db.prompt_sql_query("none","afficher moi la liste des informations des employee assigné au restaurant : Le Meurice Alain Ducasse",model, tokenizer)
 
