@@ -47,8 +47,9 @@ class BaseConfig(object):
     ####### RAG #######
     RAG_MODEL = op.join(RESSOURCES_DIR,"models/bge" )# pour le embeded  "./models/bge" "BAAI/bge-base-en-v1.5"
     RAG_ARCHIVE_PATH = op.join(RESSOURCES_DIR, "RAG/archive/" )   
-    INDEX_FAISS = op.join(RESSOURCES_DIR,"models/FAISS/") 
     RAG_WEB_ARCHIVE_PATH= op.join(RESSOURCES_DIR,"RAG/web_ressources") 
+    INDEX_FAISS = op.join(RESSOURCES_DIR,"models/FAISS/") 
+
     CHUNK_SIZE=500 # taille des chunks de doc pour FAISS 
     RAG_MIN_SCORE=0.8 #seuil min de pertinence pour repondre en RAG 0.7 
     nb_chunks_to_use=1000
@@ -57,9 +58,9 @@ class BaseConfig(object):
     
     SERVER_TIMEOUT=200 # 200 sec par default
     
-    
     #### WORKFLOW ####
     folder_workflow = op.join(RESSOURCES_DIR,"industrie/ligne_PLC-advanced/workflow") 
+    rag_folder_workflow =  op.join(RESSOURCES_DIR,"industrie/ligne_PLC-advanced/faiss")
     rapport_llm_export =  op.join(RESSOURCES_DIR,"rapport_llm_export")
 
 Config = BaseConfig

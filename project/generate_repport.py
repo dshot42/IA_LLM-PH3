@@ -43,7 +43,7 @@ def generate_pdf_report(filename, title, sections):
 
 def repportLLM(result_llm,anomalies):
     sections = [
-        ("RésulAnomalie constaté : ",anomalies),
+        ("Résultat Anomalie constaté : ",anomalies),
         ("Résultat IA", result_llm)
     ]
 

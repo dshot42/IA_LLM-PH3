@@ -217,14 +217,20 @@ def eval_prompt_anomaly(prompt, model, tokenizer, row):
 
 ############## TRS ##############
 
-def trs_prompt_diag(workflow, anomalies_df, trs: dict, period: dict) -> str:
+import json
+
+import json
+
+def trs_prompt_diag(workflow, anomalies_df, trs: dict, period: dict, step_impact_pct=None) -> str:
     """
-    Prompt TRS strict :
+    Prompt TRS ultra-strict :
     - workflow nominal = référence absolue
-    - sortie factuelle, concise
-    - erreurs listées par step uniquement
+    - aucune solution par défaut
+    - aucun pourcentage inventé
+    - analyse factuelle uniquement
     """
 
+    # --- Sécurités ---
     if anomalies_df is None or anomalies_df.empty:
         anomalies_count = 0
         total_lost_time = 0.0
@@ -240,17 +246,15 @@ def trs_prompt_diag(workflow, anomalies_df, trs: dict, period: dict) -> str:
             total_lost_time = "non mesurable"
 
         lines = []
-        for _, row in anomalies_df.iterrows():
+        for _, row in anomalies_df.head(50).iterrows():
             lines.append(
                 f"Cycle {int(row['cycle'])} | "
                 f"Machine {row['machine']} | "
-                f"step Id {row.get('step_id', 'UNKNOWN')} | "
-                f"Step Name {row.get('step_name', 'UNKNOWN')} | "
+                f"StepId {row.get('step_id', 'UNKNOWN')} | "
+                f"Step {row.get('step_name', 'UNKNOWN')} | "
                 f"Level {row.get('level', 'UNKNOWN')} | "
-                f"Overrun {round(row.get('duration_overrun_s', 0), 2)} s | "
-                f"MLScore {round(row.get('anomaly_score', 0), 3)}"
+                f"Overrun {round(row.get('duration_overrun_s', 0), 2)} s"
             )
-        anomalies_str = "\n".join(lines)
         anomalies_str = "\n".join(lines)
 
     trs_value = trs.get("trs", trs)
@@ -260,113 +264,97 @@ def trs_prompt_diag(workflow, anomalies_df, trs: dict, period: dict) -> str:
         else json.dumps(workflow, ensure_ascii=False, indent=2)
     )
 
+    # --- Bloc % factuels (optionnel) ---
+    if step_impact_pct is None:
+        impact_block = "Aucun pourcentage d'impact fourni."
+        percent_rule = (
+            "INTERDICTION ABSOLUE :\n"
+            "- Tu ne dois produire AUCUN pourcentage, ratio ou statistique.\n"
+            "- Tu dois uniquement qualifier les impacts à partir des overruns observés.\n"
+        )
+        output_format_line = "Machine | Step | Type d’écart | Impact cycle | Impact (qualitatif)"
+    else:
+        items = []
+        iterable = list(step_impact_pct.items())
+        iterable = sorted(iterable, key=lambda kv: float(kv[1]), reverse=True)[:10]
+
+        for key, pct in iterable:
+            if isinstance(key, tuple) and len(key) == 2:
+                machine, step = key
+            else:
+                machine, step = "UNKNOWN", str(key)
+            items.append(f"- {machine} | {step} | {float(pct):.1f}%")
+
+        impact_block = "\n".join(items) if items else "Aucun pourcentage disponible."
+        percent_rule = (
+            "Les pourcentages ci-dessous sont CALCULÉS côté Python.\n"
+            "INTERDICTION ABSOLUE :\n"
+            "- Tu ne dois PAS recalculer.\n"
+            "- Tu ne dois PAS extrapoler.\n"
+            "- Tu dois réutiliser EXACTEMENT ces valeurs.\n"
+        )
+        output_format_line = "Machine | Step | Type d’écart | Impact cycle | Impact production % (fourni)"
+
     return f"""
-Tu es un expert industriel senior spécialisé en performance de lignes automatisées
-et en analyse de workflows PLC / Grafcet.
+Tu es un expert industriel senior (PLC / Grafcet / performance ligne).
 
 Tu analyses une dérive TRS UNIQUEMENT à partir des données fournies.
-Le WORKFLOW NOMINAL est la RÉFÉRENCE ABSOLUE de comparaison.
+Le WORKFLOW NOMINAL est la RÉFÉRENCE ABSOLUE.
+Aucune interprétation non démontrée n’est autorisée.
 
-⚠️ RÈGLES ABSOLUES (À RESPECTER STRICTEMENT) :
-- Réponds DIRECTEMENT par l’analyse demandée.
-- N’écris AUCUNE consigne, commentaire ou méta-explication.
-- Ne répète AUCUNE information fournie.
-- N’invente RIEN.
-- Ne reformule PAS les données.
-- Toute analyse doit être reliée EXPLICITEMENT au workflow nominal.
-- Toute estimation doit être JUSTIFIÉE par les écarts observés.
-- Ne produis PAS de texte hors format.
+RÈGLES ABSOLUES :
+- Aucun méta-texte, aucune justification de méthode.
+- Aucune invention (causes, pannes, maintenance, capteurs).
+- Ne reformule pas les données brutes.
+- Si une cause ou une action n’est pas démontrée : écrire STRICTEMENT "non démontré".
+
+RÈGLES SUR LES % :
+{percent_rule}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-WORKFLOW NOMINAL (RÉFÉRENCE UNIQUE)
+WORKFLOW NOMINAL (RÉFÉRENCE)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 {workflow_str}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CONTEXTE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Période :
-- Début : {period['start']}
-- Fin   : {period['end']}
-
-TRS (conformité workflow) : {trs_value}
-Nombre d’anomalies : {anomalies_count}
-Temps total perdu vs nominal : {total_lost_time} s
+Début : {period['start']}
+Fin   : {period['end']}
+TRS : {trs_value}
+Anomalies : {anomalies_count}
+Temps perdu vs nominal : {total_lost_time} s
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ANOMALIES OBSERVÉES
+ANOMALIES OBSERVÉES (FACTUEL)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 {anomalies_str}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OBJECTIF DE L’ANALYSE (OBLIGATOIRE)
+IMPACT PAR STEP (FACTUEL)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Tu dois analyser les STEPS en erreur ou en déphasage de cycle en te basant
-STRICTEMENT sur la comparaison :
-
-RÉEL ⟷ NOMINAL (workflow)
-
-L’analyse doit obligatoirement :
-
-1) Identifier les STEPS NON CONFORMES au workflow nominal
-   (sur-durée, blocage, erreur PLC, désynchronisation).
-
-2) Associer chaque step NON CONFORME à :
-   - sa MACHINE
-   - son rôle dans le workflow nominal
-   - son type de dérive (temps / séquence / synchronisation / erreur)
-
-3) Quantifier l’IMPACT SUR LA PRODUCTION en POURCENTAGE :
-   - part estimée du temps perdu total imputable à chaque step
-   - impact relatif sur le TRS (en %)
-   ⚠️ Les pourcentages doivent être cohérents entre eux (total ≤ 100%).
-
-4) Identifier le ou les STEPS LES PLUS IMPACTANTS :
-   - ceux qui contribuent le plus à la perte de temps
-   - ceux qui dégradent le plus la synchronisation du workflow
-
-5) Réaliser une ANALYSE FINE DU WORKFLOW :
-   - respect ou violation de l’ordre des machines
-   - propagation de la dérive vers l’aval (effet domino)
-   - sensibilité du cycle global à ce step
-
-6) Proposer une ANALYSE TECHNIQUE ou une SOLUTION
-   UNIQUEMENT si elle découle logiquement :
-   - du step concerné
-   - du type d’écart observé
-   - de la structure du workflow nominal
+{impact_block}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SORTIE OBLIGATOIRE — FORMAT STRICT
+FORMAT STRICT DE SORTIE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1) Diagnostic TRS
+- Commencer OBLIGATOIREMENT par : "TRS = {trs_value}"
 - Phrase unique, factuelle, orientée workflow.
 
-2) Erreurs par step (LISTE SIMPLE OBLIGATOIRE)
-- Une ligne = un step
-- Format EXACT :
-  Machine | Step | Type d’écart | Impact cycle | Impact production %
+2) Erreurs par step (liste simple)
+- {output_format_line}
 
 3) Steps les plus impactants
-- Classement décroissant
-- Machine | Step | Contribution à la perte totale (%)
+- Machine | Step | Justification factuelle (overrun et/ou % fourni)
 
 4) Analyse workflow
 - 3 à 5 lignes maximum
-- Décrire comment les steps identifiés perturbent le cycle nominal
+- Uniquement constats démontrables (ordre, synchronisation, cycle global)
 
-5) Actions ou analyse technique
-- Liste courte
-- Uniquement déduite des écarts observés
-
-❌ Tout texte hors de ce format est INTERDIT.
-❌ Toute supposition est INTERDITE.
-❌ Toute répétition est INTERDITE.
+5) Actions
+- Écrire "non démontré" si aucune action ne découle directement des données
 """.strip()
 
 

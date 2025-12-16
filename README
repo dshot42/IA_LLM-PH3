@@ -41,3 +41,21 @@ pip install llama-index tavily-python
 ######	FRONT - CHAT BOX IA ######
 
 Execute index in a brower : C:\Users\come_\Desktop\ia-llm\phi3\ui-chatbox\index.html
+
+
+
+grafcet execution : 
+
+PLC / Ingestion
+      ↓
+PostgreSQL (INSERT)
+      ↓
+LISTEN / NOTIFY  ← (événement DB)
+      ↓
+Worker Python (thread)
+      ↓
+Détection d’anomalies
+      ↓
+SocketIO.emit()
+      ↓
+Frontend (Vue / Vite)

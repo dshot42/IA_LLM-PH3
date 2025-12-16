@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, Response,send_file
+from flask import Blueprint, jsonify, request, Response,send_file,abort
 from datetime import datetime, timedelta, timezone
 import time, json
 
@@ -6,9 +6,15 @@ from .connect import get_conn
 from . import queries
 from .security import jwt_required, create_token
 from .config import API_USER, API_PASSWORD
-import generate_repport
 import os
-import abort
+
+import os.path as op
+import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+import generate_repport
+
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -109,6 +115,12 @@ def oee():
         "quality": quality,
         "oee": oee_val
     })
+    
+@api_bp.get("/trs")
+@jwt_required
+def trs():
+    # todo
+    return jsonify({ })
 
 @api_bp.get("/plc/stream")
 @jwt_required

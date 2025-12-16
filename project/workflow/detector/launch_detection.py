@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import torch
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
-from feature_handler import fetch_events_df, build_cycle_features,add_duration_overrun, add_nominal_deviation, rule_based_anomalies
+from feature_handler import emit_events_df, fetch_events_df, build_cycle_features,add_duration_overrun, add_nominal_deviation, rule_based_anomalies
 from detector import train_isolation_forest, detect_anomalies
 from prompt_handler import build_prompt_for_anomaly,eval_prompt_anomaly, eval_prompt_trs, trs_prompt_diag
 import os.path as op
@@ -16,8 +16,6 @@ import TRS_handler
 
 from supervision_handler.app.factory import socketio
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-import generate_repport
 
 from config import Config
 import model as model_utils
@@ -34,12 +32,14 @@ model = model_utils.load_standard_model()
 def check_anomalies(param):
     print("[INFO] Chargement des événements depuis PostgreSQL...")
     df_events = fetch_events_df(param)
+    emit_events_df(df_events)
     if df_events.empty:
         print("[WARN] Aucun événement trouvé dans la base.")
         return
 
     print(f"[INFO] {len(df_events)} événements récupérés.")
     features = build_cycle_features(df_events)
+
     features = add_nominal_deviation(features, workflow_content)
     features = add_duration_overrun(features, workflow_content)
     features = rule_based_anomalies(features, workflow_content)
@@ -100,6 +100,7 @@ def get_TRS_and_diagnostic_anomaly_impact(param):
         "end": param["end"].isoformat()
     }
 
+    # predicate
     prompt = trs_prompt_diag(workflow_content, anomalies_df, trs, period)
     eval_prompt_trs(prompt=prompt,model= model,tokenizer= tokenizer,anomalies_df = anomalies_df)
     
@@ -129,3 +130,6 @@ if __name__ == "__main__":
     }
     # generer une short synthese a chaque fois pour analyse 
     get_TRS_and_diagnostic_anomaly_impact(param2)
+    
+    
+    

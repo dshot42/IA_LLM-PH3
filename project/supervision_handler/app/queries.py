@@ -89,15 +89,23 @@ WITH w AS (
 cycles AS (
   SELECT COUNT(*)::bigint AS total_cycles
   FROM w
-  WHERE message ILIKE '%CYCLE_END%'
+  WHERE message ILIKE '%%CYCLE_END%%'
 ),
 quality AS (
   SELECT
     COUNT(*) FILTER (
-      WHERE (message ILIKE '%M5_OK%' OR code ILIKE '%M5_OK%' OR (payload ? 'result' AND payload->>'result' ILIKE 'OK'))
+      WHERE (
+        message ILIKE '%%M5_OK%%'
+        OR code ILIKE '%%M5_OK%%'
+        OR (payload ? 'result' AND payload->>'result' ILIKE 'OK')
+      )
     )::bigint AS good_parts,
     COUNT(*) FILTER (
-      WHERE (message ILIKE '%M5_NOK%' OR code ILIKE '%M5_NOK%' OR (payload ? 'result' AND payload->>'result' ILIKE 'NOK'))
+      WHERE (
+        message ILIKE '%%M5_NOK%%'
+        OR code ILIKE '%%M5_NOK%%'
+        OR (payload ? 'result' AND payload->>'result' ILIKE 'NOK')
+      )
     )::bigint AS bad_parts
   FROM w
 ),
@@ -111,4 +119,19 @@ SELECT
   (SELECT good_parts FROM quality) AS good_parts,
   (SELECT bad_parts FROM quality) AS bad_parts,
   (SELECT downtime_s FROM downtime) AS downtime_s;
+"""
+
+
+LAST_EVENT_BY_TS = """
+SELECT
+    ts,
+    part_id,
+    machine,
+    level,
+    code,
+    step_id,
+    step_name
+FROM plc_events
+WHERE ts = %s
+LIMIT 1
 """
