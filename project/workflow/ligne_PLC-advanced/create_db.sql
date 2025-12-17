@@ -310,6 +310,46 @@ WHERE a.level='OK'
   AND b.level='OK';
 
 
+CREATE TABLE plc_anomalies (
+    id SERIAL PRIMARY KEY,
+    -- Identité industrielle
+    ts_detected TIMESTAMPTZ NOT NULL DEFAULT now(),
+    cycle INTEGER NOT NULL,
+    machine TEXT NOT NULL,
+    step_id TEXT,
+    step_name TEXT,
+
+    -- Détection
+    anomaly_score DOUBLE PRECISION,
+    rule_anomaly BOOLEAN NOT NULL,
+    rule_reasons JSONB,
+
+    -- STEP
+    has_step_error BOOLEAN DEFAULT FALSE,
+    n_step_errors INTEGER DEFAULT 0,
+
+    -- Cycle
+    cycle_duration_s DOUBLE PRECISION,
+    duration_overrun_s DOUBLE PRECISION,
+
+    -- Prédictif
+    events_count INTEGER,
+    window_days INTEGER,
+    ewma_ratio DOUBLE PRECISION,
+    rate_ratio DOUBLE PRECISION,
+    burstiness DOUBLE PRECISION,
+    hawkes_score INTEGER,
+    confidence TEXT,
+
+    -- Statut métier
+    status TEXT DEFAULT 'OPEN',   -- OPEN / ACK / CLOSED
+    severity TEXT,                -- INFO / WATCH / CRITICAL
+
+    -- Métadonnées
+    created_at TIMESTAMPTZ DEFAULT now(),
+    report_path TEXT
+);
+
 
 
   --- INSERT ---
@@ -362,26 +402,74 @@ VALUES
 -- ============================================================
 -- 3. GRAFCET STEPS
 -- ============================================================
-INSERT INTO production_step (step_code, name, description, machine_id, is_technical)
-VALUES
-('S0', 'INIT', 'Initialisation / Reset', NULL, TRUE),
+INSERT INTO production_step (step_code, name, description, machine_id) VALUES
+('M1.01','WAIT_ENTRY','Attente d’une pièce à l’entrée.',1),
+('M1.02','CONVEY_IN','Convoyage de la pièce en zone de travail.',1),
+('M1.03','DETECT_PIECE','Capteur confirme la présence pièce.',1),
+('M1.04','SLOW_ALIGN','Alignement longitudinal fin.',1),
+('M1.05','SIDE_ALIGNMENT','Alignement latéral.',1),
+('M1.06','CLAMP_CLOSE','Commande serrage étau/pince.',1),
+('M1.07','CLAMP_VERIFY','Contrôle pression / fin de course clamp.',1),
+('M1.08','ID_READ','Lecture code Datamatrix/RFID.',1),
+('M1.09','POSITION_CHECK','Vérification position X/Y/Z.',1),
+('M1.10','READY_SIGNAL','Émission signal M1_READY_FOR_M2.',1);
 
-('S1', 'CHARGEMENT', 'Chargement & Préparation',
- (SELECT id FROM machine WHERE code='M1'), FALSE),
+INSERT INTO production_step (step_code, name, description, machine_id) VALUES
+('M2.01','WAIT_M1_READY','Attente signal M1_READY_FOR_M2.',2),
+('M2.02','FIXTURE_LOCK','Verrouillage pièce sur la table.',2),
+('M2.03','TOOL_CHECK','Contrôle outil présent.',2),
+('M2.04','SPINDLE_RAMP_UP','Montée en vitesse broche ébauche.',2),
+('M2.05','COOLANT_ON','Ouverture arrosage.',2),
+('M2.06','APPROACH_POS','Approche position usinage.',2),
+('M2.07','ROUGH_PASS_1','Première passe d’ébauche.',2),
+('M2.08','ROUGH_PASS_2','Deuxième passe d’ébauche.',2),
+('M2.09','TOOLWEAR_CHECK','Contrôle usure outil.',2),
+('M2.10','RETURN_SAFE_POS','Retour position sûre.',2),
+('M2.11','SPINDLE_STOP','Arrêt broche.',2),
+('M2.12','CHIP_CLEAN','Évacuation copeaux.',2),
+('M2.13','DONE_SIGNAL','Émission signal M2_DONE.',2);
 
-('S2', 'EBAUCHE', 'Usinage ébauche',
- (SELECT id FROM machine WHERE code='M2'), FALSE),
+INSERT INTO production_step (step_code, name, description, machine_id) VALUES
+('M3.01','WAIT_M2_DONE','Attente signal M2_DONE.',3),
+('M3.02','FINE_FIXTURE_CHECK','Vérification montage précision.',3),
+('M3.03','TOOL_VERIFY_FINISH','Contrôle outil finition.',3),
+('M3.04','SPINDLE_FINE_RAMP','Montée vitesse finition.',3),
+('M3.05','APPROACH_FINISH','Approche zone finition.',3),
+('M3.06','FINISH_PASS_1','Première passe finition.',3),
+('M3.07','FINISH_PASS_2','Deuxième passe finition.',3),
+('M3.08','SURFACE_SENSOR_CHECK','Contrôle état surface.',3),
+('M3.09','OPTIONAL_PROBE','Palpage dimensionnel.',3),
+('M3.10','CLEAN_AIR','Soufflage final.',3),
+('M3.11','DONE_SIGNAL','Émission signal M3_DONE.',3);
 
-('S3', 'FINITION', 'Usinage finition',
- (SELECT id FROM machine WHERE code='M3'), FALSE),
+INSERT INTO production_step (step_code, name, description, machine_id) VALUES
+('M4.01','WAIT_M3_DONE','Attente signal M3_DONE.',4),
+('M4.02','TOOL_SELECT_DRILL','Sélection foret.',4),
+('M4.03','DRILL_APPROACH','Approche perçage.',4),
+('M4.04','DRILL_EXEC','Exécution perçage.',4),
+('M4.05','DRILL_RETRACT','Retrait foret.',4),
+('M4.06','TOOL_SELECT_TAP','Sélection taraud.',4),
+('M4.07','TAP_ENGAGE','Engagement taraud.',4),
+('M4.08','TAP_MONITOR_TORQUE','Surveillance couple.',4),
+('M4.09','TAP_RETRACT','Sortie taraud.',4),
+('M4.10','HOLE_CLEAN','Nettoyage trou.',4),
+('M4.11','DONE_SIGNAL','Émission signal M4_DONE.',4);
 
-('S4', 'PERCAGE_TARAUDAGE', 'Perçage & taraudage',
- (SELECT id FROM machine WHERE code='M4'), FALSE),
+INSERT INTO production_step (step_code, name, description, machine_id) VALUES
+('M5.01','WAIT_M4_DONE','Attente signal M4_DONE.',5),
+('M5.02','RECEIVE_PART','Réception pièce.',5),
+('M5.03','VISION_TRIGGER','Déclenchement vision.',5),
+('M5.04','ACQ_2D','Acquisition images 2D.',5),
+('M5.05','ACQ_3D','Scan 3D.',5),
+('M5.06','FEATURE_MEASURE','Mesure caractéristiques.',5),
+('M5.07','COMPARE_SPECS','Comparaison tolérances.',5),
+('M5.08','LIGHT_DEBURR','Ébavurage léger.',5),
+('M5.09','UNCLAMP','Déverrouillage pièce.',5),
+('M5.10','UNLOAD_TO_BIN','Déchargement bac.',5),
+('M5.11','LOG_RESULT','Enregistrement résultat.',5);
 
-('S5', 'CONTROLE', 'Contrôle & déchargement',
- (SELECT id FROM machine WHERE code='M5'), FALSE),
-
-('S6', 'END_CYCLE', 'Fin de cycle / boucle', NULL, TRUE);
+ALTER TABLE production_step
+ADD CONSTRAINT uq_production_step_code UNIQUE (step_code);
 
 -- ============================================================
 -- 4. GRAFCET TRANSITIONS

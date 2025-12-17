@@ -1,13 +1,13 @@
 import torch
 import io
 from config import Config
-import faiss_handler
+import ia.faiss_handler
 from PIL import Image
 from transformers import Blip2Processor, Blip2ForConditionalGeneration
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import base64
-import history_handler
-import  web_search_handler
+import ia.history_handler
+import  ia.web_search_handler
 
 from playwright.async_api import async_playwright
 

@@ -11,9 +11,7 @@ import os
 import os.path as op
 import os
 import sys
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-import generate_repport
+import ia.generate_repport
 
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -174,8 +172,85 @@ def plc_stream():
 
     return Response(gen(), mimetype="text/event-stream")
 
-@api_bp.route("/api/download/<path:name>")
+@api_bp.route("/download/<path:name>")
 def download_report(name):
 
     return generate_repport.download_report(name)
 
+
+@api_bp.get("/anomalies")
+@jwt_required
+def get_anomalies():
+    """
+    Source de vérité FRONT
+    Retourne les anomalies persistées (ordre décroissant de gravité)
+    """
+    limit = min(int(request.args.get("limit", 25)), 1000)
+
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(queries.LIST_ANOMALIES, (limit,))
+
+        rows = cur.fetchall()
+
+    return jsonify(rows)
+
+
+@api_bp.get("/anomalies/steps/<step_id>")
+@jwt_required
+def get_anomalies_by_step(step_id: str):
+    page = max(int(request.args.get("page", 1)), 1)
+    page_size = min(max(int(request.args.get("page_size", 25)), 1), 500)
+    offset = (page - 1) * page_size
+
+    with get_conn() as conn, conn.cursor() as cur:
+        # TOTAL
+        cur.execute("""
+            SELECT COUNT(*) AS total
+            FROM plc_anomalies
+            WHERE step_id = %s
+        """, (step_id,))
+        total = int(cur.fetchone()["total"])
+
+        # ITEMS
+        cur.execute("""
+            SELECT *
+            FROM plc_anomalies
+            WHERE step_id = %s
+            ORDER BY ts_detected DESC, anomaly_score DESC
+            LIMIT %s OFFSET %s
+        """, (step_id, page_size, offset))
+
+        items = cur.fetchall()
+
+    return jsonify({
+        "step_id": step_id,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "items": items
+    })
+
+
+@api_bp.get("/steps")
+@jwt_required
+def list_steps():
+    page = max(int(request.args.get("page", 1)), 1)
+    page_size = min(max(int(request.args.get("page_size", 50)), 1), 500)
+    offset = (page - 1) * page_size
+
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(queries.PRODUCTION_STEPS_COUNT)
+        total = int(cur.fetchone()["total"])
+
+        cur.execute(
+            queries.PRODUCTION_STEPS_PAGE,
+            (page_size, offset)
+        )
+        items = cur.fetchall()
+
+    return jsonify({
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "items": items
+    })

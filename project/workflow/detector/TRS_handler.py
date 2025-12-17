@@ -2,15 +2,12 @@ import os
 import psycopg2
 from datetime import datetime
 from config_plc import DB_CONFIG
-from feature_handler import parse_workflow
+from  workflow.detector.feature_handler import parse_workflow
 
 
 # ============================================================
 # DB
 # ============================================================
-
-def connect_db():
-    return psycopg2.connect(**DB_CONFIG)
 
 
 # ============================================================
@@ -81,7 +78,7 @@ def compute_theoretical_cycle(workflow: dict) -> float:
 # TRS CALCULATION (WORKFLOW-DRIVEN)
 # ============================================================
 
-def calculate_trs(workflow: str, start: datetime, end: datetime):
+def calculate_trs(conn, workflow: str, start: datetime, end: datetime):
     """
     TRS = Disponibilité × Performance × Qualité
     Basé strictement sur le workflow nominal
@@ -96,7 +93,7 @@ def calculate_trs(workflow: str, start: datetime, end: datetime):
     # ---------------------------
     # Fetch real data
     # ---------------------------
-    conn = connect_db()
+
     try:
         cycles_data = fetch_cycles_data(conn, start, end)
     finally:

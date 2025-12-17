@@ -1,13 +1,13 @@
 from datetime import datetime, timezone
-import os
-import sys
-from app.models import Part, PlcEvent
 import json
-from ..factory import db
+import os
+# imports internes supervision_handler
+from supervision_handler.app.models import Part, PlcEvent
+from supervision_handler.app.factory import socketio, db
 
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+# import config global (racine projet)
 from config import Config
+
 
 def load_workflow() -> dict:
     workflow_file = os.path.join(
@@ -16,7 +16,7 @@ def load_workflow() -> dict:
     )
 
     with open(workflow_file, "r", encoding="utf-8") as f:
-        return json.load(f)   # ✅ parsing JSON
+        return json.load(f)  
     
     
 def get_last_machine(workflow: dict) -> str:

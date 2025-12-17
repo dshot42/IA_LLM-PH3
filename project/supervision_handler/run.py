@@ -1,6 +1,6 @@
-from app.factory import create_app
-from app.extensions import socketio
-from app.ws import init_socketio
+from supervision_handler.app.factory import create_app
+from supervision_handler.app.extensions import socketio
+from supervision_handler.app.ws import init_socketio
 
 app = create_app()
 init_socketio(socketio, app)

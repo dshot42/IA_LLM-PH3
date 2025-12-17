@@ -135,3 +135,59 @@ FROM plc_events
 WHERE ts = %s
 LIMIT 1
 """
+
+LIST_ANOMALIES = """
+  SELECT
+      id,
+      ts,
+      cycle,
+      machine,
+      step_id,
+      step_name,
+      anomaly_score,
+      rule_anomaly,
+      rule_reasons,
+      has_step_error,
+      n_step_errors,
+      cycle_duration_s,
+      duration_overrun_s,
+      events_count,
+      window_days,
+      ewma_ratio,
+      rate_ratio,
+      burstiness,
+      hawkes_score,
+      confidence,
+      severity
+  FROM plc_anomalies
+  ORDER BY
+      ts DESC,
+      anomaly_score DESC
+  LIMIT 500;
+"""
+        
+        
+# ============================
+# PRODUCTION STEPS
+# ============================
+
+PRODUCTION_STEPS_COUNT = """
+SELECT COUNT(*) AS total
+FROM production_step
+"""
+
+PRODUCTION_STEPS_PAGE = """
+SELECT
+    ps.id,
+    ps.step_code,
+    ps.name,
+    ps.description,
+    ps.machine_id,
+    m.name AS machine_name,
+    ps.is_technical,
+    ps.created_at
+FROM production_step ps
+LEFT JOIN machine m ON m.id = ps.machine_id
+ORDER BY ps.step_code ASC
+LIMIT %s OFFSET %s
+"""

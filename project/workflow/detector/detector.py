@@ -21,6 +21,7 @@ FEATURE_COLUMNS = [
     "cycle_duration_s",
 ]
 
+
 def train_isolation_forest(features: "pd.DataFrame") -> "IsolationForest":
     """Entraîne un IsolationForest sur les features sélectionnées."""
     X = features[FEATURE_COLUMNS].fillna(0).values
@@ -48,3 +49,5 @@ def detect_anomalies(model: "IsolationForest", features: "pd.DataFrame") -> "pd.
     features["is_anomaly"] = y_pred == -1
 
     return features
+
+

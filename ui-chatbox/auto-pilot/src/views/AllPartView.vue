@@ -6,7 +6,6 @@ import type { MachineLive, PartListItem } from '../types'
 import MachinesLive from '../components/MachinesLive.vue'
 import PartsTable from '../components/PartsTable.vue'
 
-const machines = ref<MachineLive[]>([])
 const parts = ref<PartListItem[]>([])
 const total = ref(0)
 const page = ref(1)

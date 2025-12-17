@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue"
+import { api } from '../services/api'
 
 /* CONFIG */
-const host = "192.168.1.24"
 
 /* STATE */
 const messages = ref<any[]>([])
@@ -53,23 +53,20 @@ async function sendMessage() {
   addLoader()
 
   const url = sqlSwitch.value
-    ? `http://${host}:11434/api/sql`
-    : `http://${host}:11434/api/generate`
+    ? `/chat_ia/sql`
+    : `/chat_ia/generate`
 
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt })
+    const res = await api.post(url, {
+      params: { prompt }
     })
 
-    const data = await res.json()
     removeLoader()
 
     if (sqlSwitch.value) {
-      addSQLMessage(data)
+      addSQLMessage(res.data)
     } else {
-      addMessage(data.reply || data, "ai")
+      addMessage(res.data.reply || res.data, "ai")
     }
   } catch (e: any) {
     removeLoader()
@@ -83,42 +80,52 @@ function onFileChange(e: Event) {
   if (!file) return
 
   const reader = new FileReader()
+
   reader.onload = () => {
     const img = new Image()
+
     img.onload = async () => {
       const canvas = document.createElement("canvas")
       const ctx = canvas.getContext("2d")!
 
       const maxWidth = 300
       const scale = maxWidth / img.width
+
       canvas.width = maxWidth
       canvas.height = img.height * scale
 
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
       const img64 = canvas.toDataURL("image/jpeg", 0.8)
 
+      // 👉 affichage immédiat côté user
       addImage(img64, "user")
       addLoader()
 
       try {
-        const res = await fetch(`http://${host}:11434/api/prompt/image`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: img64 })
-        })
+        const res = await api.post(
+          "/chat_ia/prompt/image",
+          { prompt: img64 },
+          { headers: { "Content-Type": "application/json" } }
+        )
 
-        const data = await res.json()
         removeLoader()
-        addMessage(data.reply, "ai")
+        addMessage(res.data.reply ?? res.data, "ai")
       } catch (e: any) {
         removeLoader()
-        addMessage("Erreur image", "ai")
+        addMessage(
+          "Erreur image : " + (e.response?.data?.message || e.message),
+          "ai"
+        )
       }
     }
+
     img.src = reader.result as string
   }
+
   reader.readAsDataURL(file)
 }
+
 </script>
 
 <template>

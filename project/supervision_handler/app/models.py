@@ -98,3 +98,81 @@ class MachineStepExecution(db.Model):
     duration_ms = db.Column(db.Integer)
     status = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class PlcAnomaly(db.Model):
+    __tablename__ = "plc_anomalies"
+
+    # ============================
+    # PK
+    # ============================
+    id = db.Column(db.Integer, primary_key=True)
+
+    # ============================
+    # Identité industrielle
+    # ============================
+    ts_detected = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow
+    )
+
+    cycle = db.Column(db.Integer, nullable=False)
+    machine = db.Column(db.Text, nullable=False)
+
+    step_id = db.Column(db.Text, nullable=True)
+    step_name = db.Column(db.Text, nullable=True)
+
+    # ============================
+    # Détection
+    # ============================
+    anomaly_score = db.Column(db.Float, nullable=True)
+
+    rule_anomaly = db.Column(db.Boolean, nullable=False, default=False)
+    rule_reasons = db.Column(JSONB, nullable=True)
+
+    # ============================
+    # STEP (terrain)
+    # ============================
+    has_step_error = db.Column(db.Boolean, default=False)
+    n_step_errors = db.Column(db.Integer, default=0)
+
+    # ============================
+    # Cycle
+    # ============================
+    cycle_duration_s = db.Column(db.Float, nullable=True)
+    duration_overrun_s = db.Column(db.Float, nullable=True)
+
+    # ============================
+    # Prédictif
+    # ============================
+    events_count = db.Column(db.Integer, nullable=True)
+    window_days = db.Column(db.Integer, nullable=True)
+
+    ewma_ratio = db.Column(db.Float, nullable=True)
+    rate_ratio = db.Column(db.Float, nullable=True)
+    burstiness = db.Column(db.Float, nullable=True)
+
+    hawkes_score = db.Column(db.Integer, nullable=True)
+    confidence = db.Column(db.Text, nullable=True)
+
+    # ============================
+    # Métier
+    # ============================
+    status = db.Column(
+        db.Text,
+        nullable=False,
+        default="OPEN"   # OPEN / ACK / CLOSED
+    )
+
+    severity = db.Column(
+        db.Text,
+        nullable=True    # INFO / WATCH / CRITICAL
+    )
+
+    # ============================
+    # Métadonnées
+    # ============================
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=datetime.utcnow
+    )

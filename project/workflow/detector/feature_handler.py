@@ -1,83 +1,92 @@
-# feature_builder.py
-# Extraction et agrégation des features PLC (TimescaleDB)
-# Architecture :
-# - Events bruts
-# - Features STEP (preuve terrain)
-# - Features CYCLE (ML / règles)
-# - Calculs d’impact (Python only)
-
 import psycopg2
 import pandas as pd
 import json
 import os
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from supervision_handler.app.factory import socketio
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from config_plc import DB_CONFIG
-
-
-# ============================================================
-# DATABASE
-# ============================================================
-
-def connect_db():
-    return psycopg2.connect(**DB_CONFIG)
-
+from supervision_handler.app.factory import socketio,db
 
 # ============================================================
 # FETCH EVENTS (BRUTS)
 # ============================================================
+
+def fetch_last_event():
+    """
+    Récupère les événements PLC bruts.
+    Aucun calcul métier ici.
+    """
+    sql = """
+    SELECT
+        ts,
+        machine,
+        level,
+        code,
+        message,
+        cycle,
+        step_id,
+        step_name,
+        duration
+    FROM plc_events
+    WHERE cycle IS NOT NULL
+    """
+
+    sql += " ORDER BY ts DESC limit 1"
+
+    df = pd.read_sql(sql, db.engine)
+
+    if df.empty:
+        return df
+
+    df["ts"] = pd.to_datetime(df["ts"], utc=True)
+    df["cycle"] = df["cycle"].astype(int)
+
+    return df.reset_index(drop=True)
+
 
 def fetch_events_df(param):
     """
     Récupère les événements PLC bruts.
     Aucun calcul métier ici.
     """
-    conn = connect_db()
-    try:
-        sql = """
-        SELECT
-            ts,
-            machine,
-            level,
-            code,
-            message,
-            cycle,
-            step_id,
-            step_name,
-            duration
-        FROM plc_events
-        WHERE cycle IS NOT NULL
-        """
 
-        params = []
+    sql = """
+    SELECT
+        ts,
+        machine,
+        level,
+        code,
+        message,
+        cycle,
+        step_id,
+        step_name,
+        duration
+    FROM plc_events
+    WHERE cycle IS NOT NULL
+    """
 
-        if param.get("start") and param.get("end"):
-            sql += " AND ts BETWEEN %s AND %s"
-            params.extend([param["start"], param["end"]])
-        elif param.get("start"):
-            sql += " AND ts >= %s"
-            params.append(param["start"])
-        elif param.get("end"):
-            sql += " AND ts <= %s"
-            params.append(param["end"])
+    params = []
 
-        if param.get("part_id"):
-            sql += " AND part_id = %s"
-            params.append(param["part_id"])
+    if param.get("start") and param.get("end"):
+        sql += " AND ts BETWEEN %s AND %s"
+        params.extend([param["start"], param["end"]])
+    elif param.get("start"):
+        sql += " AND ts >= %s"
+        params.append(param["start"])
+    elif param.get("end"):
+        sql += " AND ts <= %s"
+        params.append(param["end"])
 
-        if param.get("ligne"):
-            sql += " AND machine = %s"
-            params.append(param["ligne"])
+    if param.get("part_id"):
+        sql += " AND part_id = %s"
+        params.append(param["part_id"])
 
-        sql += " ORDER BY cycle ASC, ts ASC"
+    if param.get("ligne"):
+        sql += " AND machine = %s"
+        params.append(param["ligne"])
 
-        df = pd.read_sql(sql, conn, params=params)
+    sql += " ORDER BY cycle ASC, ts ASC"
 
-    finally:
-        conn.close()
+    df = pd.read_sql(sql, db, params=params)
+
 
     if df.empty:
         return df
@@ -89,20 +98,60 @@ def fetch_events_df(param):
 
 
 
-def emit_events_df(df, channel="plc_event"):
-    if df.empty:
+def emit_anomalies_df(df, channel="plc_anomaly"):
+    """
+    Émet des anomalies enrichies (cycle + step + ML + prédiction).
+    """
+    if df is None or df.empty:
         return
 
+    # Nettoyage / normalisation pour le front
+    records = []
+
+    for _, row in df.iterrows():
+        records.append({
+            # Identité
+            "cycle": int(row.get("cycle")),
+            "machine": row.get("machine"),
+            "step_id": row.get("step_id"),
+            "step_name": row.get("step_name"),
+
+            # Détection
+            "anomaly_score": float(row.get("anomaly_score", 0)),
+            "rule_anomaly": bool(row.get("rule_anomaly", False)),
+            "rule_reasons": row.get("rule_reasons", []),
+
+            # STEP
+            "has_step_error": bool(row.get("has_step_error", False)),
+            "n_step_errors": int(row.get("n_step_errors", 0)),
+
+            # Cycle
+            "cycle_duration_s": float(row.get("cycle_duration_s", 0)),
+            "duration_overrun_s": float(row.get("duration_overrun_s", 0)),
+
+            # 🔮 Prédictif (optionnel)
+            "prediction": {
+                "events_count": row.get("events_count"),
+                "window_days": row.get("window_days"),
+                "confidence": row.get("confidence"),
+                "ewma_ratio": row.get("ewma_ratio"),
+                "rate_ratio": row.get("rate_ratio"),
+                "burstiness": row.get("burstiness"),
+                "hawkes_score": row.get("hawkes_score"),
+            } if not pd.isna(row.get("events_count")) else None,
+        })
+
     payload = {
-        "count": len(df),
-        "events": df.to_dict(orient="records")
+        "count": len(records),
+        "anomalies": records
     }
 
     socketio.emit(
         channel,
         payload,
-        namespace="/"   # ou "/" si tu n’utilises pas de namespace
+        namespace="/"
     )
+    
     
 def fetch_events_df_with_groupby(param, period: str = "day"):
     if period != "day":
@@ -111,87 +160,106 @@ def fetch_events_df_with_groupby(param, period: str = "day"):
     if not param.get("start") or not param.get("end"):
         raise ValueError("start et end sont obligatoires")
 
-    conn = connect_db()
-    try:
-        params = [
-            param["start"],
-            param["end"],
-            param["start"],
-            param["end"],
-        ]
+    params = [
+        param["start"],
+        param["end"],
+        param["start"],
+        param["end"],
+    ]
 
-        sql = """
-        WITH days AS (
-            SELECT generate_series(
-                %s::date,
-                %s::date,
-                INTERVAL '1 day'
-            ) AS day
-        ),
-        steps AS (
-            SELECT DISTINCT
-                step_id,
-                step_name,
-                machine
-            FROM plc_events
-        ),
-        grid AS (
-            SELECT
-                d.day,
-                s.machine,
-                s.step_id,
-                s.step_name
-            FROM days d
-            CROSS JOIN steps s
-        ),
-        events AS (
-            SELECT
-                ts::date AS day,
-                machine,
-                step_id,
-                step_name,
-                COUNT(*) AS event_count,
-                SUM(duration) AS total_duration
-            FROM plc_events
-            WHERE cycle IS NOT NULL
-              AND ts BETWEEN %s AND %s
-        """
-
-        if param.get("ligne"):
-            sql += " AND machine = %s"
-            params.append(param["ligne"])
-
-        sql += """
-            GROUP BY
-                day,
-                machine,
-                step_id,
-                step_name
-        )
+    sql = """
+    WITH days AS (
+        SELECT generate_series(
+            %s::date,
+            %s::date,
+            INTERVAL '1 day'
+        ) AS day
+    ),
+    steps AS (
+        SELECT DISTINCT
+            step_id,
+            step_name,
+            machine
+        FROM plc_events
+    ),
+    grid AS (
         SELECT
-            g.day AS period_day,
-            g.machine,
-            g.step_id,
-            g.step_name,
-            COALESCE(e.event_count, 0) AS event_count,
-            COALESCE(e.total_duration, 0) AS total_duration
-        FROM grid g
-        LEFT JOIN events e
-            ON e.day = g.day
-           AND e.machine = g.machine
-           AND e.step_id = g.step_id
-        ORDER BY
-            g.day ASC,
-            g.step_id ASC
-        """
+            d.day,
+            s.machine,
+            s.step_id,
+            s.step_name
+        FROM days d
+        CROSS JOIN steps s
+    ),
+    events AS (
+        SELECT
+            ts::date AS day,
+            machine,
+            step_id,
+            step_name,
+            COUNT(*) AS event_count,
+            SUM(duration) AS total_duration
+        FROM plc_events
+        WHERE cycle IS NOT NULL
+            AND ts BETWEEN %s AND %s
+    """
 
-        df = pd.read_sql(sql, conn, params=params)
+    if param.get("ligne"):
+        sql += " AND machine = %s"
+        params.append(param["ligne"])
 
-    finally:
-        conn.close()
+    sql += """
+        GROUP BY
+            day,
+            machine,
+            step_id,
+            step_name
+    )
+    SELECT
+        g.day AS period_day,
+        g.machine,
+        g.step_id,
+        g.step_name,
+        COALESCE(e.event_count, 0) AS event_count,
+        COALESCE(e.total_duration, 0) AS total_duration
+    FROM grid g
+    LEFT JOIN events e
+        ON e.day = g.day
+        AND e.machine = g.machine
+        AND e.step_id = g.step_id
+    ORDER BY
+        g.day ASC,
+        g.step_id ASC
+    """
+
+    df = pd.read_sql(sql, db, params=params)
 
     df["period_day"] = pd.to_datetime(df["period_day"])
     return df.reset_index(drop=True)
+
+
+
+def project_step_to_cycle(step_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Projette les informations STEP au niveau cycle.
+    Le `code` retenu est le dernier code d'erreur STEP du cycle.
+    """
+
+    agg = (
+        step_df
+        .groupby(["cycle", "machine"])
+        .agg(
+            has_step_error=("has_step_error", "max"),
+            n_step_errors=("has_step_error", "sum"),
+            max_step_duration=("step_duration_s", "max"),
+            sum_step_duration=("step_duration_s", "sum"),
+            faulty_step_id=("step_id", "last"),
+            code=("code", lambda s: s.dropna().iloc[-1] if not s.dropna().empty else None)
+        )
+        .reset_index()
+    )
+
+    return agg
 
 
 # ============================================================
@@ -222,31 +290,41 @@ def parse_workflow(workflow_json: str) -> dict:
 # STEP-LEVEL FEATURES (NOUVEL ÉTAGE)
 # ============================================================
 
-def build_step_features(df: pd.DataFrame) -> pd.DataFrame:
+def build_step_features(df_events: pd.DataFrame) -> pd.DataFrame:
     """
-    Agrégation réelle par STEP (cycle / machine / step).
-    Base factuelle READY / DONE / synchronisation.
+    Construit les features STEP à partir des événements PLC.
+    NE MODIFIE PAS la logique cycle existante.
     """
-    if df.empty:
-        return df
 
-    grp = df.groupby(
-        ["cycle", "machine", "step_id", "step_name"],
-        as_index=False
+    df = df_events.copy()
+
+    # --- GARANTIES MINIMALES (NON DESTRUCTIVES) ---
+    if "code" not in df.columns:
+        df["code"] = None
+
+    if "level" not in df.columns:
+        df["level"] = None
+
+    # --- ERREUR STEP (booléen simple) ---
+    df["has_step_error"] = (
+        df["level"].isin(["ERROR", "ALARM"])
+        | df["code"].notna()
     )
 
-    step_df = grp.agg(
-        ts_start=("ts", "min"),
-        ts_end=("ts", "max"),
-        n_events=("ts", "count"),
-        n_errors=("level", lambda s: (s == "ERROR").sum()),
+    # --- AGRÉGATION IDENTIQUE À TON DESIGN ---
+    step_df = (
+        df
+        .groupby(["cycle", "machine", "step_id"], dropna=False)
+        .agg(
+            step_duration_s=("duration", "sum"),
+            has_step_error=("has_step_error", "max"),
+            code=("code", "last"),
+        )
+        .reset_index()
     )
-
-    step_df["step_duration_s"] = (
-        step_df["ts_end"] - step_df["ts_start"]
-    ).dt.total_seconds()
 
     return step_df
+
 
 
 
@@ -347,19 +425,54 @@ def add_duration_overrun(features_df: pd.DataFrame, workflow_json: str) -> pd.Da
 def rule_based_anomalies(features: pd.DataFrame, workflow_json: str) -> pd.DataFrame:
     df = features.copy()
 
-    rules = {
-        "duration_out_of_nominal": df["delta_duration_ratio"].abs() > 0.20,
-        "step_count_mismatch": df["delta_steps"] != 0,
-        "plc_error_present": df["n_errors"] > 0,
-        "cycle_duration_drift": df["cycle_delta_s"].abs() > 10,
-        "grafcet_order_violation": df["machine_order"] != df["expected_machine_order"],
-    }
+    # --- PARAMÈTRES INDUSTRIELS ---
+    CYCLE_DRIFT_S = 10          # dérive cycle absolue (secondes)
+    CYCLE_DRIFT_PCT = 0.20      # dérive cycle relative (20%)
 
-    rules_df = pd.DataFrame(rules)
+    df["rule_anomaly"] = False
+    df["rule_reasons"] = [[] for _ in range(len(df))]
+    df["severity"] = "OK"
 
-    df["rule_anomaly"] = rules_df.any(axis=1)
-    df["rule_reasons"] = rules_df.apply(
-        lambda r: [k for k, v in r.items() if v], axis=1
-    )
+    for idx, row in df.iterrows():
+        reasons = []
+
+        # ==================================================
+        # 1️⃣ ERREURS STEP / PLC → ANOMALIE DIRECTE
+        # ==================================================
+        if row.get("n_errors", 0) > 0:
+            reasons.append("plc_error_present")
+
+        if row.get("delta_steps", 0) != 0:
+            reasons.append("step_count_mismatch")
+
+        if row.get("machine_order") != row.get("expected_machine_order"):
+            reasons.append("grafcet_order_violation")
+            
+        if row.get("has_step_error", False):
+            reasons.append("step_error")
+
+        # 👉 Si une erreur STEP existe → anomalie immédiate
+        if reasons:
+            df.at[idx, "rule_anomaly"] = True
+            df.at[idx, "rule_reasons"] = reasons
+            df.at[idx, "severity"] = "STEP_ERROR"
+            continue
+
+        # ==================================================
+        # 2️⃣ ÉCART CYCLE → ANOMALIE SI SEUIL
+        # ==================================================
+        delta_cycle_s = abs(row.get("cycle_delta_s", 0))
+        delta_cycle_pct = abs(row.get("delta_duration_ratio", 0))
+
+        if delta_cycle_s > CYCLE_DRIFT_S or delta_cycle_pct > CYCLE_DRIFT_PCT:
+            df.at[idx, "rule_anomaly"] = True
+            df.at[idx, "rule_reasons"] = ["cycle_duration_drift"]
+            df.at[idx, "severity"] = "CYCLE_DRIFT"
+            continue
+
+        # ==================================================
+        # 3️⃣ SINON → PAS ANOMALIE
+        # ==================================================
+        df.at[idx, "rule_reasons"] = []
 
     return df

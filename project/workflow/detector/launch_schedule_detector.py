@@ -2,6 +2,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 import launch_detection
+from feature_handler import fetch_events_df
 
 def seconds_until_next_run(hour: int, minute: int, tz=timezone.utc):
     now = datetime.now(tz)
@@ -31,7 +32,8 @@ def check_detector(last_detection):
         }
 
         try:
-            launch_detection.check_anomalies(param)
+            df_events = fetch_events_df(param)
+            launch_detection.check_anomalies(df_events,param)
             last_detection = now
         except Exception as e:
             print("Erreur check_detector:", e)
