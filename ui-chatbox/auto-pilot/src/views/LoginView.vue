@@ -28,7 +28,7 @@ async function submit() {
 <template>
   <div class="card">
     <h1>Connexion</h1>
-    <p class="muted">Login API (démo). Token JWT stocké en localStorage.</p>
+    <p class="muted">Auto Pilot Login</p>
 
     <div class="grid">
       <label>

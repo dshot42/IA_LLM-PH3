@@ -10,8 +10,8 @@ import AllPartView from './views/AllPartView.vue'
 import { auth } from './services/auth'
 import { initSocket } from "./services/socket"
 import ChatView from './views/ChatView.vue'
-import StepAnomaliesView from './views/StepAnomaliesView.vue'
-import StepDetailsView from './views/StepDetailsView.vue'
+import AnomaliesListView from './views/AnomaliesListView.vue'
+import AnomalyDetailView from './views/AnomalyDetailView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -20,8 +20,8 @@ const router = createRouter({
     { path: '/', component: DashboardView, meta: { requiresAuth: true } },
     { path: '/parts/:partId', component: PartView, meta: { requiresAuth: true } },
     { path: '/parts', component: AllPartView, meta: { requiresAuth: true } },
-    { path: '/steps', component: StepAnomaliesView, meta: { requiresAuth: true } },
-    { path: '/stepDetails/:id', component: StepDetailsView, meta: { requiresAuth: true } },
+    { path: '/anomalie', component: AnomaliesListView, meta: { requiresAuth: true } },
+    { path: '/anomalieDetails/:id', component: AnomalyDetailView, meta: { requiresAuth: true } },
     { path: '/chatIA', component: ChatView, meta: { requiresAuth: true } }
   ]
 })

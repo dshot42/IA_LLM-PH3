@@ -1,15 +1,15 @@
 import torch
 import io
 from config import Config
-import ia.faiss_handler
 from PIL import Image
 from transformers import Blip2Processor, Blip2ForConditionalGeneration
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import base64
 import ia.history_handler
-import  ia.web_search_handler
-
-from playwright.async_api import async_playwright
+import ia.web_search_handler
+from ia.faiss.faiss_handler import retrieve
+from ia.history_handler import filter_relevant_history,add_user_query
+from ia.web_search_handler import searchWeb
 
 def evaluate_model(model, tokenizer):
     prompts = [
@@ -56,7 +56,7 @@ def faiss_search(user_ip, query, model, tokenizer):
     """
 
     # Récupération des chunks pertinents
-    retrieved = faiss_handler.retrieve(
+    retrieved = retrieve(
         user_ip,
         query
     )
@@ -125,9 +125,9 @@ def faiss_search(user_ip, query, model, tokenizer):
 
 def prompt_query(user_ip, query, model, tokenizer):
     
-    history = history_handler.filter_relevant_history(user_ip, query)  # cherche dans l'historique si contexte pertiant au prompt
+    history = filter_relevant_history(user_ip, query)  # cherche dans l'historique si contexte pertiant au prompt
 
-    history_handler.add_user_query(user_ip,query)   
+    add_user_query(user_ip,query)   
     
     # Formater l'historique en texte
                 
@@ -137,7 +137,7 @@ def prompt_query(user_ip, query, model, tokenizer):
         for i, h in enumerate(history, 1):
             history_text += f"{i}. {h}\n"
 
-    web_results = web_search_handler.searchWeb(query)
+    web_results = searchWeb(query)
     context_text = ""
     if web_results:
         context_text = "Contexte Web pertinent :\n"
@@ -146,7 +146,7 @@ def prompt_query(user_ip, query, model, tokenizer):
             if r.get('snippet'):
                 context_text += f"   {r['snippet']}\n"
 
-    final_prompt = f"""
+    prompt = f"""
     Tu es un assistant français. Réponds uniquement à partir de l'historique et du contexte web.
     Réponse obligatoire : courte, précise, claire, sans reformuler la question.
 

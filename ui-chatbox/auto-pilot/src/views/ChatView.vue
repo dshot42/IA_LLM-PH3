@@ -232,7 +232,7 @@ function onFileChange(e: Event) {
 
     #chatbox {
         width: auto;
-        height: 500px;
+        height: 70vh;
         overflow-y: auto;
         border-radius: 10px;
         background: rgba(11,15,23,1);

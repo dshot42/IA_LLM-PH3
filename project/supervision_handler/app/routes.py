@@ -11,7 +11,7 @@ import os
 import os.path as op
 import os
 import sys
-import ia.generate_repport
+from ia.generate_repport import download_report
 
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -47,16 +47,20 @@ def list_parts():
 
     return jsonify({"page": page, "page_size": page_size, "total": total, "items": items})
 
+
+
 @api_bp.get("/parts/<part_id>")
 @jwt_required
 def part_detail(part_id: str):
     with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(queries.PART_PRODUCTION_STEPS, (part_id,))
+        cur.execute(queries.EVENT_BY_PART, (part_id,))
         steps = cur.fetchall()
         cur.execute(queries.PART_MACHINE_CYCLES, (part_id,))
         machines = cur.fetchall()
+        cur.execute(queries.ANOMALIES_BY_PART_ID, (part_id,))
+        anomalies = cur.fetchall()
 
-    return jsonify({"part_id": part_id, "machines": machines, "steps": steps})
+    return jsonify({"part_id": part_id, "machines": machines, "steps": steps, "anomalies" : anomalies})
 
 @api_bp.get("/machines/live")
 @jwt_required
@@ -172,10 +176,10 @@ def plc_stream():
 
     return Response(gen(), mimetype="text/event-stream")
 
-@api_bp.route("/download/<path:name>")
-def download_report(name):
+@api_bp.route("/download/<path>")
+def download_report(path):
 
-    return generate_repport.download_report(name)
+    return download_report(path)
 
 
 @api_bp.get("/anomalies")
@@ -185,48 +189,59 @@ def get_anomalies():
     Source de vérité FRONT
     Retourne les anomalies persistées (ordre décroissant de gravité)
     """
-    limit = min(int(request.args.get("limit", 25)), 1000)
+    page = max(int(request.args.get("page", 1)), 1)
+    page_size = min(max(int(request.args.get("page_size", 50)), 1), 500)
+    offset = (page - 1) * page_size
+
 
     with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(queries.LIST_ANOMALIES, (limit,))
+        cur.execute(queries.ANOMALIES_COUNT)
+        total = int(cur.fetchone()["total"])
+        cur.execute(queries.LIST_ANOMALIES
+                    , (page_size, offset))
+        items = cur.fetchall()
 
-        rows = cur.fetchall()
-
-    return jsonify(rows)
+    return jsonify({"page": page, "page_size": page_size, "total": total, "items": items})
 
 
-@api_bp.get("/anomalies/steps/<step_id>")
+@api_bp.get("/events/<part_id>")
 @jwt_required
-def get_anomalies_by_step(step_id: str):
-    page = max(int(request.args.get("page", 1)), 1)
-    page_size = min(max(int(request.args.get("page_size", 25)), 1), 500)
-    offset = (page - 1) * page_size
+def get_events_by_part(part_id: str):
+
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(queries.EVENT_BY_PART
+                    , (part_id))
+        items = cur.fetchall()
+
+    return jsonify({"items": items})
+
+
+@api_bp.get("/cycle/<event_ts>")
+@jwt_required
+def get_anomalies_by_step(event_ts: str):
 
     with get_conn() as conn, conn.cursor() as cur:
         # TOTAL
         cur.execute("""
-            SELECT COUNT(*) AS total
-            FROM plc_anomalies
-            WHERE step_id = %s
-        """, (step_id,))
-        total = int(cur.fetchone()["total"])
+            SELECT * 
+            FROM plc_events
+            WHERE ts = %s
+        """, (event_ts,))
+        part_id = cur.fetch()["part_id"]
 
         # ITEMS
         cur.execute("""
-            SELECT *
-            FROM plc_anomalies
-            WHERE step_id = %s
-            ORDER BY ts_detected DESC, anomaly_score DESC
-            LIMIT %s OFFSET %s
-        """, (step_id, page_size, offset))
+            SELECT
+                ts, machine, level, code, message, part_id,
+                cycle, step_id, step_name, duration
+            FROM plc_events
+            WHERE part_id = %s
+            ORDER BY ts ASC
+        """, (part_id))
 
         items = cur.fetchall()
 
     return jsonify({
-        "step_id": step_id,
-        "page": page,
-        "page_size": page_size,
-        "total": total,
         "items": items
     })
 

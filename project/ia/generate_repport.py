@@ -1,12 +1,43 @@
+from decimal import Decimal
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
-from datetime import datetime
+from datetime import date, datetime
 from flask import send_file,abort
 from config import Config
 import os
 import os.path as op
+from pathlib import Path
+
+
+def content_to_text(content) -> str:
+    """
+    Convertit n'importe quel contenu en texte affichable PDF
+    (dict, list, datetime, None, etc.)
+    """
+    if content is None:
+        return ""
+
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, (datetime, date)):
+        return content.isoformat()
+
+    if isinstance(content, Decimal):
+        return str(float(content))
+
+    if isinstance(content, dict):
+        lines = []
+        for k, v in content.items():
+            lines.append(f"{k} : {v}")
+        return "\n".join(lines)
+
+    if isinstance(content, list):
+        return "\n".join(str(v) for v in content)
+
+    return str(content)
 
 def generate_pdf_report(filename, title, sections):
     doc = SimpleDocTemplate(
@@ -36,20 +67,38 @@ def generate_pdf_report(filename, title, sections):
     for section_title, content in sections:
         story.append(Paragraph(f"<b>{section_title}</b>", styles["Heading2"]))
         story.append(Spacer(1, 8))
-        story.append(Paragraph(content.replace("\n", "<br/>"), styles["Normal"]))
+        text = content_to_text(content)
+        story.append(
+            Paragraph(
+                text.replace("\n", "<br/>"),
+                styles["Normal"]
+            )
+        )
         story.append(Spacer(1, 16))
 
     doc.build(story)
 
-def repportLLM(result_llm,anomalies):
+def repportLLM(result_llm,anomalies, prompt):
+    print(result_llm)
+    
     sections = [
         ("Résultat Anomalie constaté : ",anomalies),
+        ("Prompt : ", prompt),
+        ("#####################", ""),
         ("Résultat IA", result_llm)
     ]
 
-    datenow = datetime.now().strftime("%Y%m%d_%H%M%S")
+    folder = Path(
+        Config.rapport_llm_export,
+        datetime.now().strftime("%Y%m%d")
+    )
+
+    folder.mkdir(parents=True, exist_ok=True)
     generate_pdf_report(
-        filename= op.join(Config.rapport_llm_export,  f"rapport_llm_{datenow}.pdf"),
+        filename = op.join(
+            folder,
+            f"rapport_llm_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        ),
         title="Rapport de Supervision IA - ",
         sections=sections
     )

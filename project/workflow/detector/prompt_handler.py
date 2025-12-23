@@ -1,225 +1,364 @@
+from typing import Dict, List, Optional
 import torch
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
-
+import json
 from threading import Thread
 from transformers import TextIteratorStreamer
 import os.path as op
 import os
 import sys
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-import ia.generate_repport
+from ia.generate_repport import repportLLM
 from config import Config
 
 from supervision_handler.app.factory import socketio
 
 llm_executor = ThreadPoolExecutor(max_workers=1)
 
+def reduce_workflow(workflow: Dict, anomaly: Dict) -> Dict:
+    """
+    Réduction AUTOMATIQUE du workflow à partir de l'anomalie :
+    - machine concernée
+    - steps nominaux
+    - durée et fenêtre nominales
+    - codes erreur possibles
+    """
 
+    machine_id = anomaly["machine"]
+    step_terminal = anomaly.get("step_name")
 
-def anomalies_df_to_text(anomalies_df):
-    if anomalies_df is None or anomalies_df.empty:
-        return "Aucune anomalie significative détectée."
+    # ==========================
+    # INFOS LIGNE
+    # ==========================
+    light = {
+        "ligne": workflow["ligne_industrielle"]["nom"],  
+        "cycle_nominal_s": workflow["ligne_industrielle"]["cycle_nominal_s"],
+        "machine": machine_id,
+    }
 
+    # ==========================
+    # DURÉE & FENÊTRE NOMINALES
+    # ==========================
+    # Durée nominale machine
+    light["duree_nominale_machine_s"] = (
+        workflow["workflow_global"]["durees_nominales_s"]
+        .get(machine_id)
+    )
+
+    # Fenêtre cycle nominal
+    for seq in workflow["scenario_nominal"]["sequence"]:
+        if seq["machine"] == machine_id:
+            light["fenetre_cycle_nominale_s"] = f'{seq["start_at"]}-{seq["end_at"]}'
+            break
+
+    # ==========================
+    # STEPS NOMINAUX MACHINE
+    # ==========================
+    steps = workflow["machines"][machine_id]["steps"]
+
+    light["steps_nominal"] = [
+        {
+            "id": s["id"],
+            "name": s["name"],
+            "description": s["description"]
+        }
+        for s in steps
+    ]
+
+    # Index du step terminal dans la séquence nominale
+    if step_terminal:
+        step_ids = [s["id"] for s in steps]
+        if step_terminal in step_ids:
+            idx = step_ids.index(step_terminal)
+            light["step_terminal_nominal_index"] = idx
+            light["step_terminal_nominal"] = steps[idx]["name"]
+
+            # Steps amont / aval (ultra utile pour le raisonnement LLM)
+            light["steps_amont"] = [
+                s["id"] for s in steps[:idx]
+            ]
+            light["steps_aval"] = [
+                s["id"] for s in steps[idx + 1 :]
+            ]
+
+    # ==========================
+    # CODES ERREUR POSSIBLES
+    # ==========================
+    light["error_codes_possibles"] = [
+        {
+            "code": e["code"],
+            "error": e["error"],
+            "description": e["cause"]
+        }
+        for e in workflow["machines"][machine_id].get("error_codes", [])
+    ]
+
+    # ==========================
+    # DÉPENDANCES GRAFCET (AMONT / AVAL)
+    # ==========================
+    deps_amont = []
+    deps_aval = []
+
+    for t in workflow["grafcet"]["transitions"]:
+        if t["to"].startswith("S") and t.get("condition"):
+            if machine_id in t["condition"]:
+                deps_amont.append(t["condition"])
+        if t["from"].startswith("S") and t.get("condition"):
+            if machine_id in t["condition"]:
+                deps_aval.append(t["condition"])
+
+    if deps_amont:
+        light["dependances_amont"] = deps_amont
+    if deps_aval:
+        light["dependances_aval"] = deps_aval
+
+    return light
+
+def render_nominal_scenario(light: dict) -> str:
     lines = []
-    for _, r in anomalies_df.iterrows():
+
+    lines.append(f"Machine nominale : {light['machine']}")
+    lines.append(f"Durée nominale machine : {light.get('duree_nominale_machine_s', 'N/A')} s")
+    lines.append(f"Fenêtre cycle nominale : {light.get('fenetre_cycle_nominale_s', 'N/A')}")
+
+    lines.append("")
+    lines.append("Enchaînement nominal des steps :")
+
+    for i, s in enumerate(light.get("steps_nominal", []), start=1):
         lines.append(
-            f"Cycle {int(r['cycle'])} | "
-            f"Machine {r['machine']} | "
-            f"Durée réelle {r['cycle_duration_s']:.1f}s | "
-            f"Surplus {r['duration_overrun_s']:.1f}s | "
-            f"Score {r.get('anomaly_score', 0):.3f}"
+            f"{i}. {s['id']} {s['name']} – {s['description']}"
         )
+
+    if "step_terminal_nominal" in light:
+        lines.append("")
+        lines.append(
+            f"Step terminal nominal attendu : "
+            f"{light['steps_nominal'][light['step_terminal_nominal_index']]['id']} "
+            f"{light['step_terminal_nominal']}"
+        )
+
+    if light.get("steps_amont"):
+        lines.append("")
+        lines.append(
+            "Steps amont (doivent être exécutés avant) : "
+            + ", ".join(light["steps_amont"])
+        )
+
+    if light.get("steps_aval"):
+        lines.append(
+            "Steps aval (doivent suivre) : "
+            + ", ".join(light["steps_aval"])
+        )
+
+    if light.get("dependances_amont"):
+        lines.append("")
+        lines.append(
+            "Dépendances Grafcet amont : "
+            + " | ".join(light["dependances_amont"])
+        )
+
+    if light.get("dependances_aval"):
+        lines.append(
+            "Dépendances Grafcet aval : "
+            + " | ".join(light["dependances_aval"])
+        )
+
+    if light.get("error_codes_possibles"):
+        lines.append("")
+        lines.append("Codes erreur possibles sur cette machine :")
+        for e in light["error_codes_possibles"]:
+            lines.append(
+                f"- {e['code']} : {e['error']} ({e['description']})"
+            )
+
     return "\n".join(lines)
 
 
 
-def build_prompt_for_anomaly(workflow, anomaly_row, context):
+def build_prompt_for_anomaly(workflow: str, anomaly: dict):
     """
-    Prompt expert industriel :
-    - workflow nominal = référence absolue
-    - analyse causale NOMINAL vs RÉEL
-    - focalisation sur step terminal + impact cycle
+    Prompt Mistral Instruct GGUF / HF
+    Rapport industriel factuel, verbeux et démontrable
     """
 
-    machine = anomaly_row["machine"]
-    cycle = int(anomaly_row["cycle"])
-    step = anomaly_row.get("step_name", "UNKNOWN")
-    level = anomaly_row.get("level", "UNKNOWN")
-    score = float(anomaly_row["anomaly_score"])
-    n_errors = int(anomaly_row["n_errors"])
-    duration_machine = float(anomaly_row["duration_s"])
-    cycle_duration = float(anomaly_row["cycle_duration_s"])
-    n_events = int(anomaly_row["n_events"])
+    machine = anomaly.get("machine", "UNKNOWN")
+    cycle = int(anomaly.get("cycle", 0))
+    step = anomaly.get("step_name", "UNKNOWN")
+    level = anomaly.get("level", "UNKNOWN")
+    score = float(anomaly.get("anomaly_score", 0.0))
+    severity = anomaly.get("severity", "UNKNOWN")
 
-    workflow_str = (
-        workflow if isinstance(workflow, str)
-        else json.dumps(workflow, ensure_ascii=False, indent=2)
+    n_errors = int(anomaly.get("n_step_errors", 0))
+
+    cycle_duration = float(anomaly.get("cycle_duration_s", 0.0))
+    duration_overrun = float(anomaly.get("duration_overrun_s", 0.0))
+
+    ewma = anomaly.get("ewma_ratio")
+    rate_ratio = anomaly.get("rate_ratio")
+    burst = anomaly.get("burstiness")
+    hawkes = anomaly.get("hawkes_score")
+
+    rule_anomaly = anomaly.get("rule_anomaly", False)
+    rule_reasons = anomaly.get("rule_reasons", [])
+
+    workflow_light = reduce_workflow(
+        workflow=json.loads(workflow),
+        anomaly=anomaly
     )
 
+    scenario_nominal_str = render_nominal_scenario(workflow_light)
+
     prompt = f"""
-Tu es une IA experte en supervision industrielle et en analyse de workflows automatisés
-(PLC, Grafcet, CNC, robotique, synchronisation multi-machines).
+[INST]
+RÔLE : Ingénieur process industrielle senior (PLC / Grafcet).
 
-Tu interviens comme un ingénieur process / méthodes senior chargé d’expliquer
-UNE ANOMALIE DE PRODUCTION en comparant STRICTEMENT le comportement RÉEL
-au WORKFLOW NOMINAL OFFICIEL (référence absolue).
+OBJECTIF :
+Produire un rapport industriel détaillé analysant une anomalie de production
+par comparaison STRICTE entre le scénario nominal officiel et les données réelles observées.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-WORKFLOW NOMINAL OFFICIEL (RÉFÉRENCE)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRINCIPE FONDAMENTAL :
+Le scénario nominal est la référence absolue.
+Toute conclusion doit être fondée sur des écarts démontrables à partir des données fournies.
 
-Le workflow ci-dessous définit le comportement NORMAL attendu de la ligne :
-- ordre et synchronisation des machines
-- enchaînement des steps (Grafcet machine)
-- durées nominales par machine et par cycle
-- logique nominale du cycle global
+RÈGLES IMPÉRATIVES :
+- Interdiction de causes inventées ou d’hypothèses non démontrées.
+- Les données nominales et observées ne doivent pas être reformulées.
+- Les constats et analyses doivent être formulés en phrases complètes.
+- Toute information non démontrable doit être expliquée par l’insuffisance
+  ou l’incohérence des données disponibles.
+- Aucun markdown, aucun exemple générique.
+- Longueur maximale du rapport : 1500 caractères.
 
-Toute divergence doit être interprétée comme une dérive de process.
+SCÉNARIO NOMINAL OFFICIEL :
+{scenario_nominal_str}
 
-WORKFLOW NOMINAL :
-{workflow_str}
+DONNÉES RÉELLES OBSERVÉES :
+Machine = {machine}
+Cycle = {cycle}
+Step terminal observé = {step}
+Niveau d’erreur PLC = {level}
+Sévérité calculée = {severity}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ANOMALIE OBSERVÉE (DONNÉES RÉELLES)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Durée cycle machine mesurée = {cycle_duration:.2f} s
+Dépassement de durée constaté = {duration_overrun:.2f} s
 
-Cette anomalie a été détectée automatiquement par analyse statistique
-(IsolationForest) à partir des logs PLC réels.
+Règle(s) de détection déclenchée(s) = {rule_reasons}
+Anomalie par règle = {rule_anomaly}
 
-- Machine concernée : {machine}
-- Cycle de production : {cycle}
-- Step terminal observé : {step}
-- Niveau d’erreur final : {level}
-- Sévérité statistique (ML score) : {score:.3f}
-- Nombre d’événements PLC : {n_events}
-- Nombre d’erreurs PLC : {n_errors}
-- Durée réelle machine (cycle machine agrégé) : {duration_machine:.2f} s
-- Durée réelle du cycle global : {cycle_duration:.2f} s
+Score ML global = {score:.3f}
+EWMA ratio = {ewma}
+Rate ratio = {rate_ratio}
+Burstiness = {burst}
+Hawkes score = {hawkes}
 
-IMPORTANT :
-Le "Step terminal observé" correspond au DERNIER step exécuté sur cette machine
-pour ce cycle. Il représente généralement le point de blocage, de dérive
-ou de ralentissement effectif du workflow.
+Nombre d’erreurs PLC sur le cycle = {n_errors}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OBJECTIF DE L’ANALYSE (OBLIGATOIRE)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FORMAT STRICT DU RAPPORT :
 
-Tu dois analyser cette anomalie en COMPARANT EXPLICITEMENT :
+Machine :
+Step concerné :
 
-RÉEL  ⟷  NOMINAL (workflow officiel)
+Comportement nominal attendu :
+Décrire le comportement attendu selon le scénario nominal officiel,
+en particulier la durée cycle attendue et la fenêtre nominale.
 
-L’analyse doit impérativement répondre aux points suivants :
+Comportement réel observé :
+Décrire factuellement le comportement observé à partir des données réelles,
+notamment la durée cycle mesurée et le dépassement constaté.
 
-1) Quel est le RÔLE du step "{step}" dans le workflow nominal ?
-   (fonction, position dans le Grafcet, dépendances amont / aval)
+Analyse NOMINAL vs RÉEL :
+- Durée des steps :
+- Durée cycle machine :
+- Impact cycle global :
+- Cohérence Grafcet :
 
-2) Quel comportement NOMINAL est attendu à ce step ?
-   - durée nominale attendue
-   - conditions de sortie normales
-   - synchronisation attendue avec les autres machines
+Impact sur la production :
+Décrire l’impact du dépassement de durée sur la performance de la ligne.
 
-3) En quoi le comportement RÉEL s’en écarte-t-il ?
-   - sur-durée / blocage / erreur / désynchronisation
-   - impact sur la durée machine et le cycle global
+Causes techniques probables :
+Uniquement des causes directement déductibles des données (ex : sur-temps global sans erreur PLC).
 
-4) Analyse NOMINAL vs RÉEL :
-   • cohérence durée step (via durée machine agrégée)
-   • cohérence durée cycle machine
-   • impact sur le cycle global
-   • respect ou violation de la logique Grafcet
+Actions terrain prioritaires :
+Lister des actions concrètes de diagnostic ou de vérification terrain
+cohérentes avec l’anomalie de durée constatée (maximum 5).
 
-5) Quel est l IMPACT INDUSTRIEL réel ?
-   - allongement cycle
-   - déphasage inter-machines
-   - accumulation buffers
-   - baisse de TRS (conformité workflow)
+Niveau de criticité :
+Qualifier la criticité (FAIBLE / MODÉRÉ / ÉLEVÉ / CRITIQUE)
+en cohérence avec la sévérité et le dépassement temporel observé.
 
-6) Quelles sont les CAUSES TECHNIQUES PROBABLES,
-   uniquement si elles sont compatibles avec :
-   - le step concerné
-   - le niveau d’erreur observé
-   - le type de dérive temporelle
-
-7) Quelles ACTIONS TERRAIN immédiates
-   un technicien / automaticien doit réaliser ?
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CONTRAINTES ABSOLUES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-- Ne JAMAIS reformuler ou répéter les données brutes.
-- Ne JAMAIS inventer de causes non observables.
-- Toujours raisonner à partir du workflow nominal.
-- Rester factuel, exploitable terrain, orienté process.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FORMAT STRICT DE LA RÉPONSE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-- **Machine :**
-- **Step concerné :**
-  (nom exact + rôle nominal dans le workflow)
-- **Comportement nominal attendu :**
-- **Comportement réel observé :**
-- **Analyse NOMINAL vs RÉEL :**
-  • durée step  
-  • durée cycle machine  
-  • impact cycle global  
-  • cohérence Grafcet  
-- **Impact sur la production :**
-- **Causes techniques probables :**
-- **Actions de diagnostic terrain prioritaires :**
-- **Niveau de criticité :**
-  FAIBLE / MODÉRÉ / ÉLEVÉ / CRITIQUE
+FIN_RAPPORT
+[/INST]
 """.strip()
 
     return prompt
 
 
-def eval_prompt_anomaly(prompt, model, tokenizer, row):
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-    streamer = TextIteratorStreamer(
-        tokenizer,
-        skip_prompt=True,
-        skip_special_tokens=True
+
+def eval_prompt_anomaly_gguf(prompt: str, model, anomalie: dict):
+
+    output = model.create_chat_completion(
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        temperature=0.0,
+        max_tokens=700,
+        repeat_penalty=1.10,
+        stop=["FIN_RAPPORT"]
     )
 
+    # ✅ BON ACCÈS AU TEXTE
+    result = output["choices"][0]["message"]["content"].strip()
 
-    def run():
-        with torch.no_grad():
-            model.generate(
-                **inputs,
-                max_new_tokens=500,
-                do_sample=True,
-                temperature=0.3,
-                top_p=0.9,
-                repetition_penalty=1.08,
-                no_repeat_ngram_size=3
-            )
+    # 🔒 fallback intelligent
+    if not result or len(result) < 50:
+        result = (
+            "Analyse non concluante en raison de données insuffisantes "
+            "ou incohérentes pour caractériser un écart process mesurable. "
+            "Un contrôle de la remontée des durées et des événements PLC est requis."
+        )
 
-    Thread(target=run, daemon=True).start()
+    socketio.emit("anomalie", {"status": "completed"}, namespace="/")
+    repportLLM(result, anomalie, prompt)
 
-    # 🔥 streaming token par token
-    full_text = ""
-    for token in streamer:
-        print(full_text)
-        full_text += token
-        socketio.emit("llm_stream", {"token": token})
+    return result
 
-    socketio.emit("llm_done", {"status": "completed"})
-    generate_repport.repportLLM(full_text,  anomalies_df_to_text(row)
-)
 
-    return full_text
+
+
+
+def eval_prompt_anomaly(prompt, model, tokenizer, anomalie):
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+    with torch.no_grad():
+        output = model.generate(
+            **inputs,
+            max_new_tokens=350,
+            do_sample=False,           # 🔒 plus d'aléatoire
+            temperature=0.0,           # 🔒
+            repetition_penalty=1.05,
+            no_repeat_ngram_size=4,
+            eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.eos_token_id,
+        )
+
+    decoded = tokenizer.decode(output[0], skip_special_tokens=True)
+
+    # ✅ retire le prompt si le modèle l'a recopié
+    if decoded.startswith(prompt):
+        result = decoded[len(prompt):].strip()
+    else:
+        result = decoded.strip()
+
+    socketio.emit("anomalie", {"status": "completed"}, namespace="/")
+    repportLLM(result, anomalie, prompt)  # (tu avais oublié prompt dans repportLLM)
+    return result
+
+
 
 ############## TRS ##############
-
-import json
-
-import json
 
 def trs_prompt_diag(workflow, anomalies_df, trs: dict, period: dict, step_impact_pct=None) -> str:
     """
@@ -359,18 +498,18 @@ FORMAT STRICT DE SORTIE
 
 
 
-def eval_prompt_trs(prompt, model, tokenizer, anomalies_df, period=None):
-    anomalie = anomalies_df_to_text(anomalies_df)
+def eval_prompt_trs(prompt, model, tokenizer, anomalie, period=None):
+
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     print(prompt)
     with torch.no_grad():
         output = model.generate(
             **inputs,
-            max_new_tokens=500,
-            do_sample=False,          # 🔒 DÉTERMINISTE
-            temperature=0.0,          # 🔒 PAS DE CRÉATIVITÉ
-            repetition_penalty=1.05,  # léger anti-boucle
-            no_repeat_ngram_size=4,   # empêche reformulation
+            max_new_tokens=350,
+            do_sample=False,        # 🔒 CRITIQUE
+            temperature=0.0,        # 🔒 CRITIQUE
+            repetition_penalty=1.05,
+            no_repeat_ngram_size=4,
             eos_token_id=tokenizer.eos_token_id,
             pad_token_id=tokenizer.eos_token_id
         )
@@ -387,9 +526,10 @@ def eval_prompt_trs(prompt, model, tokenizer, anomalies_df, period=None):
     print("RESULT TRS LLM :\n", result)
 
     # 🔹 génération du PDF TRS
-    generate_repport.repportLLM(
+    repportLLM(
         result,
-        anomalie  # on passe le DF, pas le texte
+        anomalie,
+        prompt
     )
 
     return result

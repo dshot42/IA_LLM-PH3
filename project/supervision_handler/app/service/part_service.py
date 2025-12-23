@@ -1,9 +1,10 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 import os
 # imports internes supervision_handler
 from supervision_handler.app.models import Part, PlcEvent
 from supervision_handler.app.factory import socketio, db
+from workflow.detector.launch_detection import check_anomalies
 
 # import config global (racine projet)
 from config import Config
@@ -18,7 +19,11 @@ def load_workflow() -> dict:
     with open(workflow_file, "r", encoding="utf-8") as f:
         return json.load(f)  
     
-    
+def get_last_step_of_last_machine(workflow) -> str:
+    last_machine = workflow["workflow_global"]["ordre_machines"][-1]
+    last_step = workflow["machines"][last_machine]["steps"][-1]["id"]
+    return last_step
+        
 def get_last_machine(workflow: dict) -> str:
     return workflow["workflow_global"]["ordre_machines"][-1]
 
@@ -51,13 +56,13 @@ def partIsFinish(workflow, event):
     ).one_or_none()
 
     if not part or part.status in ("FINISHED", "SCRAPPED"):
-        print("no part here")
         return False
 
     part.status = "FINISHED"
     part.finished_at = event.ts or datetime.now(timezone.utc)
 
     db.session.commit()
+    check_anomalie_on_detector(event.part_id)
     return True
 
 
@@ -99,8 +104,8 @@ def scrap_handler(event:PlcEvent) -> bool:
         part.status = "SCRAPPED"
         part.finished_at = event.ts or datetime.now(timezone.utc)
         db.session.commit()
+        check_anomalie_on_detector(event.part_id)
         return True
-
     return False
 
 
@@ -139,4 +144,17 @@ def try_reject_part_from_step_error(event) -> bool:
     part.finished_at = event.ts or datetime.now(timezone.utc)
 
     db.session.commit()
+    check_anomalie_on_detector(event.part_id)
     return True
+
+def check_anomalie_on_detector(part_id):
+    param = {
+        "only_last": False,
+        "start":  datetime.now(timezone.utc) - timedelta(days=2),
+        "end": datetime.now(timezone.utc),
+        "part_id": part_id,
+        "ligne": "",
+        "LLM_RESULT" : True
+    }
+
+    check_anomalies(param)     

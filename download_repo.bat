@@ -24,3 +24,8 @@ pip install -U huggingface_hub
 huggingface-cli download johnlam90/phi3-mini-4k-instruct-alpaca-lora --local-dir ./project/models/lora
 
 huggingface-cli download BAAI/bge-large-en-v1.5 --local-dir ./project/models/bge
+
+huggingface-cli download TheBloke/Mistral-7B-v0.1-GGUF mistral-7b-v0.1.Q5_K_M.gguf --local-dir ./project/models/mistral
+
+huggingface-cli download mistralai/Mistral-7B-Instruct-v0.3 --local-dir C:\Users\come_\Desktop\ia-llm\phi3\project\models\mistral_instruct --local-dir-use-symlinks False
+

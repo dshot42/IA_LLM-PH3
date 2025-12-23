@@ -7,10 +7,16 @@ socketio = SocketIO(
     async_mode="threading"
 )
 
+import ia.model as model_utils
 
-@socketio.on("connect")
-def on_connect():
-    print("🟢 CLIENT CONNECTÉ AU BACKEND")
-    socketio.emit("plc_event", {
-        "msg": "HELLO FROM BACKEND"
-    })
+def load_models():
+    global tokenizer, model
+    print(" --- Loading Models...")
+    tokenizer = model_utils.load_tokenizer()
+    model = model_utils.load_standard_model()
+    return tokenizer, model
+
+def load_models_gguf():
+    return None,  model_utils.llm()
+
+tokenizer, model = load_models_gguf() # load_models()

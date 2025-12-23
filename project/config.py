@@ -9,12 +9,13 @@ class BaseConfig(object):
     RESSOURCES_DIR = op.join(PROJECT_ROOT, "ressources")
 
     DEVICE_MAP="cpu" # cuda , xpu
-    #MODEL_NAME ="./models/Phi-3-small-128k-instruct" # CUDA gros model a faire tourner en 4bit ou 8 via GPU
-    MODEL_NAME = op.join(RESSOURCES_DIR, "models/Phi-3-mini-128k-instruct") # CPU "models/phi2-mini| Phi-3-mini-128k-instruct | Llama-3.1-8B"
-
-    TARGET_MODULES = ["self_attn.qkv_proj", "self_attn.o_proj"] #phi3
+    #MODEL_NAME = op.join(RESSOURCES_DIR, "models/phi3") # CPU "models/phi2-mini| Phi-3-mini-128k-instruct | Llama-3.1-8B"
+    #TARGET_MODULES = ["self_attn.qkv_proj", "self_attn.o_proj"] #phi3
     #TARGET_MODULES = ["q_proj", "v_proj"] #phi2/qwen  
     #TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj"] # llama 3
+    
+    MODEL_NAME = op.join(RESSOURCES_DIR, "models/mistral/mistral-7b-v0.1.Q5_K_M.gguf") # version gguf
+    TARGET_MODULES = ["self_attn.qkv_proj", "self_attn.o_proj"] #phi3
     
     LORA_R = 8
     LORA_ALPHA = 16
@@ -45,12 +46,12 @@ class BaseConfig(object):
     OUTPUT_DIR =  op.join(RESSOURCES_DIR,"models/lora/phi3-lora")
     
     ####### RAG #######
-    RAG_MODEL = op.join(RESSOURCES_DIR,"models/bge" )# pour le embeded  "./models/bge" "BAAI/bge-base-en-v1.5"
+    RAG_MODEL = op.join(RESSOURCES_DIR,"models/bge" ) # pour le embeded  "./models/bge" "BAAI/bge-base-en-v1.5"
     RAG_ARCHIVE_PATH = op.join(RESSOURCES_DIR, "RAG/archive/" )   
     RAG_WEB_ARCHIVE_PATH= op.join(RESSOURCES_DIR,"RAG/web_ressources") 
     INDEX_FAISS = op.join(RESSOURCES_DIR,"models/FAISS/") 
 
-    CHUNK_SIZE=500 # taille des chunks de doc pour FAISS 
+    CHUNK_SIZE=400 # taille des chunks de doc pour FAISS 
     RAG_MIN_SCORE=0.8 #seuil min de pertinence pour repondre en RAG 0.7 
     nb_chunks_to_use=1000
     #on prend en compte les X meilleurs chunks  

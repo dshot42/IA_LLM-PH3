@@ -8,3 +8,15 @@ token.txt
 project/RAG/archive/document_personnel
 ui-chatbox/auto-pilot/node_modules
 project/ressources/models/*
+
+
+*/.gralde
+*/.build
+*/build
+*/.idea
+*.iws
+*.iml
+*.ipr
+*/out/
+!**/src/main/**/out/
+!**/src/test/**/out/

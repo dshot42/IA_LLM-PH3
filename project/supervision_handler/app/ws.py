@@ -16,9 +16,6 @@ from supervision_handler.app.config import LIVE_POLL_MS
 from supervision_handler.app.service import part_service
 from supervision_handler.app.factory import db
 # import cross-package (OK)
-from workflow.detector.launch_detection import check_anomalies
-from workflow.detector.feature_handler import fetch_last_event
-
 
 _started = False
 
@@ -81,9 +78,6 @@ def init_socketio(socketio: SocketIO, app):
                                 "payload": r.get("last_payload"),
                             }))
 
-                            print("push socket event", ts)
-
-                            check_anomalie_on_detector()
 
                 except Exception:
                     import traceback
@@ -106,18 +100,7 @@ def update_part(ts):
 
     if last_event:
         part_service.update_part_from_event(last_event)
-                        
-def check_anomalie_on_detector():
-    param = {
-        "only_last": False,
-        "start":  datetime.now(timezone.utc) - timedelta(days=2),
-        "end": datetime.now(timezone.utc),
-        "part_id": "",
-        "ligne": "",
-        "LLM_RESULT" : False
-    }
-    event_df = fetch_last_event()
-    check_anomalies(event_df,param)        
+                           
     
                  
                     

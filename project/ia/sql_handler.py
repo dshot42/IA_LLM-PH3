@@ -11,7 +11,6 @@ import base64
 import ia.history_handler
 import  ia.web_search_handler
 import re
-from playwright.async_api import async_playwright
 import ia.generate_display_html
 import json
 
@@ -93,23 +92,45 @@ class Database:
         
         # Formater l'historique en texte
                     
-        schema_file = "./RAG/sql/schema_complet.sql"
+        schema_file = r"C:\Users\come_\Desktop\ia-llm\phi3\project\workflow\ligne_PLC-advanced\create_db.sql"
         with open(schema_file, "r", encoding="utf-8", errors="ignore") as f:
             schema_text = f.read()
         
         prompt = f"""
-        Tu es un générateur expert de requêtes SQL SELECT pour PostgreSQL.
-        Voici le schéma de la base de données : 
-        {schema_text}
+            RÔLE
+            Tu es un moteur déterministe de génération de requêtes SQL SELECT pour PostgreSQL.
 
-        Génère **une seule et unique requête SQL SELECT valide** correspondant exactement à cette demande :
-        {query}
+            CONTEXTE
+            Voici le schéma EXACT de la base de données (et uniquement celui-ci) :
+            {schema_text}
 
-        ⚠️ Assure toi de limité le resultat au 20 premier resultat, ne renvoie **aucune explication**, aucun commentaire, aucune répétition, aucune mise en forme Markdown. 
-        Seul le code SQL doit être retourné, en une seule et unique requête au format PostgreSQL, prêt à être exécuté.
-        Assure-toi qu'il n'y ait qu'un seul point-virgule à la fin.
-        Seul le code SQL doit être retourné en une seule et unique requête SQL SELECT valide**.
-        """
+            TÂCHE
+            Génère UNE SEULE requête SQL SELECT valide qui répond STRICTEMENT à la demande suivante :
+            {query}
+
+            CONTRAINTES OBLIGATOIRES (à respecter sans exception)
+            - La requête DOIT être compatible PostgreSQL
+            - La requête DOIT être un SELECT (aucun INSERT, UPDATE, DELETE, CREATE, DROP, WITH, CTE)
+            - La requête DOIT utiliser UNIQUEMENT les tables et colonnes présentes dans le schéma fourni
+            - La requête DOIT contenir une clause LIMIT 20
+            - La requête DOIT se terminer par UN SEUL point-virgule (;)
+            - AUCUNE sous-requête non nécessaire
+            - AUCUNE colonne, table ou alias inventé
+            - AUCUNE approximation sémantique
+
+            FORMAT DE SORTIE (critique)
+            - Retourne UNIQUEMENT le code SQL brut
+            - AUCUN texte explicatif
+            - AUCUN commentaire SQL
+            - AUCUNE mise en forme Markdown
+            - AUCUNE répétition
+            - AUCUNE phrase avant ou après
+
+            Si la demande est impossible à satisfaire STRICTEMENT avec le schéma fourni,
+            retourne EXACTEMENT :
+            SELECT NULL WHERE FALSE;
+            """
+
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
         
         def run_generation():

@@ -1,6 +1,35 @@
 <script setup lang="ts">
 import type { PartDetail } from '../types'
-defineProps<{ data: PartDetail }>()
+import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
+
+const props = defineProps<{
+  data: any
+}>()
+
+const anomalies = props.data.anomalies
+
+const anomalyStepIds = computed(() => {
+  return new Set(anomalies.map(a => a.step_id))
+})
+
+function isAnomalousStep(stepId: string): boolean {
+  return anomalyStepIds.value.has(stepId)
+}
+
+function parseTsSec(ts: string | null | undefined): number {
+  if (!ts || typeof ts !== "string") return 0
+
+  const iso = ts
+    .trim()
+    .replace(" ", "T")
+    .replace(/\.\d+/, "")          //  supprime TOUTES les ms
+    .replace(/([+-]\d{2})$/, "$1:00")
+
+  const t = new Date(iso).getTime()
+  return isNaN(t) ? 0 : t
+}
+
+
 </script>
 
 <template>
@@ -26,17 +55,43 @@ defineProps<{ data: PartDetail }>()
     <section class="panel">
       <h3>Steps (timeline)</h3>
       <div class="timeline">
-        <div v-for="s in data.steps" :key="s.start_time + s.step_id" class="evt">
-          <div class="left">
-            <div class="mono">{{ s.machine }}</div>
-            <div class="sub mono">{{ s.step_id }}</div>
+        <div v-for="(s, i) in data.steps"
+            :key="s.ts + s.step_id"
+            class="evt"
+          >
+            <div class="left">
+              <div class="mono">{{ s.machine }}</div>
+              <div class="sub mono">{{ s.step_id }}</div>
+            </div>
+
+            <div class="mid">
+              <div class="name">{{ s.step_name }}</div>
+              <div class="sub">
+                {{ new Date(s.ts).toLocaleTimeString() }}
+                → duration : 
+                {{
+                  data.steps[i + 1]
+                    ? ((parseTsSec(data.steps[i + 1].ts) - parseTsSec(s.ts)) / 1000).toFixed(2) + " s"
+                    : "-"
+                }}
+
+              </div>
+            </div>
+
+            <div>
+             <div
+                class="badge"
+                :class="[
+                  s.level.toLowerCase(),
+                  { error: isAnomalousStep(s.step_id) }
+                ]"
+                style="text-align: center;"
+              >
+                {{ isAnomalousStep(s.step_id) ? "ANOMALY" : s.level }}
+              </div>
+            </div>
           </div>
-          <div class="mid">
-            <div class="name">{{ s.step_name }}</div>
-            <div class="sub">{{ new Date(s.start_time).toLocaleTimeString() }} → {{ new Date(s.end_time).toLocaleTimeString() }}</div>
-          </div>
-          <div class="right mono">{{ Number(s.real_duration_s).toFixed(2) }}s</div>
-        </div>
+
       </div>
     </section>
   </div>
@@ -54,8 +109,11 @@ h3{margin:0 0 10px;font-size:14px;opacity:.9}
 .name{font-weight:800;letter-spacing:.3px}
 .badge{font-size:11px;padding:4px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.14)}
 .badge.ok{background:rgba(63,185,80,.18);border-color:rgba(63,185,80,.35)}
+.badge.info{background:rgba(63, 108, 185, 0.18);border-color:rgba(64, 93, 222, 0.35)}
 .badge.warning{background:rgba(210,153,34,.18);border-color:rgba(210,153,34,.35)}
 .badge.drift{background:rgba(248,81,73,.18);border-color:rgba(248,81,73,.35)}
+.badge.error, .badge.anomaly{background:rgba(189, 9, 0, 0.18);border-color:rgba(248,81,73,.35)}
+
 .rows{margin-top:8px;display:grid;gap:6px}
 .row{display:flex;justify-content:space-between;gap:10px;font-size:12px}
 .row span{opacity:.7}

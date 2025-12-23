@@ -1,267 +1,219 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta, timezone
+from sklearn.ensemble import IsolationForest
 from supervision_handler.app.factory import db
 
+# ============================================================
+# SEVERITY & CONFIDENCE
+# ============================================================
 
 SEVERITY_ORDER = {
     "OK": 0,
-    "NO_HISTORY": 1,      # anomalie détectée mais pas assez d'historique pour estimer l'impact
-    "CYCLE_DRIFT": 2,
-    "STEP_ERROR": 3,
-    "WARNING": 4,
-    "MAJOR": 5,
-    "CRITICAL": 6,
+    "NO_HISTORY": 1,
+    "WARNING": 2,
+    "MAJOR": 3,
+    "CRITICAL": 4,
 }
 
-CONFIDENCE_MAP = {
+CONFIDENCE_LEVELS = {
     "insufficient": 0.0,
     "low": 0.3,
     "medium": 0.6,
     "high": 1.0,
 }
 
-# -------------------------
-# CONFIDENCE
-# -------------------------
-def confidence_level(n):
-    if n >= 30:
+def confidence_label(n_events: int) -> str:
+    if n_events >= 30:
         return "high"
-    if n >= 20:
+    if n_events >= 20:
         return "medium"
-    if n >= 10:
+    if n_events >= 10:
         return "low"
     return "insufficient"
 
 
-# -------------------------
-# EWMA (amplification)
-# -------------------------
+# ============================================================
+# STATISTIQUES
+# ============================================================
+
 def ewma_ratio(values, alpha=0.3):
     values = np.asarray(values, dtype=float)
     values = values[np.isfinite(values) & (values > 0)]
 
-    if len(values) < 1:
+    if len(values) < 3:
         return None
 
-    e = np.median(values[:3])  # plus robuste
-    start = e
-
+    base = np.median(values[:3])
+    e = base
     for v in values:
         e = alpha * v + (1 - alpha) * e
 
-    return round(e / max(start, 1e-9), 2)
+    return round(e / max(base, 1e-9), 2)
 
 
-
-# -------------------------
-# PROXY HAWKES
-# -------------------------
 def hawkes_proxy(ts):
     ts = pd.to_datetime(ts, utc=True).sort_values()
-    if len(ts) < 1:
+    if len(ts) < 3:
         return None
 
     inter = np.diff(ts.values.astype("datetime64[s]").astype(np.int64))
-    if len(inter) == 0:
-        return None
-
     mu, sigma = np.mean(inter), np.std(inter)
-    burst = (sigma - mu) / (sigma + mu) if mu + sigma > 0 else 0.0
+    burstiness = (sigma - mu) / (sigma + mu) if mu + sigma > 0 else 0.0
 
-    t0, tN = ts.iloc[0], ts.iloc[-1]
-    total_rate = len(ts) / max((tN - t0).total_seconds(), 1)
-
-    cutoff = ts.iloc[int(len(ts) * 0.7)]
-    recent_rate = len(ts[ts >= cutoff]) / max((tN - cutoff).total_seconds(), 1)
+    total_rate = len(ts) / max((ts.iloc[-1] - ts.iloc[0]).total_seconds(), 1)
+    recent = ts.iloc[int(len(ts) * 0.7):]
+    recent_rate = len(recent) / max((recent.iloc[-1] - recent.iloc[0]).total_seconds(), 1)
 
     return {
         "rate_ratio": round(recent_rate / total_rate, 2),
-        "burstiness": round(burst, 2),
+        "burstiness": round(burstiness, 2),
     }
 
 
-def hawkes_score(proxy):
-    score = 0
-    if proxy["rate_ratio"] > 1.5:
-        score += 2
-    if proxy["rate_ratio"] > 2.0:
-        score += 2
-    if proxy["burstiness"] > 0.3:
-        score += 2
-    if proxy["burstiness"] > 0.5:
-        score += 2
-    return score
+# ============================================================
+# SQL HISTORIQUE STEP
+# ============================================================
 
-
-def compute_severity(
-    hawkes_score: float,
-    ewma_ratio: float,
-    confidence: float,
-    rule_severity: str = "OK",
-    has_step_error: bool = False,
-    cycle_overrun_s: float = 0.0,
-) -> str:
-    """
-    Sévérité finale = max(rule severity, predictive severity)
-    - rule_severity: sortie de rule_based_anomalies (STEP_ERROR / CYCLE_DRIFT / OK / ...)
-    - has_step_error: si vrai -> priorité haute
-    - cycle_overrun_s: dépassement de cycle (secondes)
-    """
-
-    # --------- sécurité types ---------
-    hawkes_score = float(hawkes_score or 0.0)
-    ewma_ratio = float(ewma_ratio or 0.0)
-    confidence = float(confidence or 0.0)
-    cycle_overrun_s = float(cycle_overrun_s or 0.0)
-
-    # --------- 1) sévérité "terrain" (règles) ---------
-    base = rule_severity or "OK"
-
-    # hard override: une erreur step = critique terrain
-    if has_step_error:
-        base = "STEP_ERROR"
-
-    # --------- 2) sévérité "prédictive" ---------
-    # Si pas de confiance ou pas d'historique : on ne sur-alarme pas
-    if confidence < 0.2:
-        pred = "NO_HISTORY"
-    else:
-        # Exemple de seuils simples
-        # ewma_ratio > 1.0 signifie aggravation vs baseline (selon ta définition)
-        score = 0
-
-        # Hawkes : intensité de répétition
-        if hawkes_score >= 3.0:
-            score += 3
-        elif hawkes_score >= 1.5:
-            score += 2
-        elif hawkes_score >= 0.8:
-            score += 1
-
-        # EWMA : dérive / amplification
-        if ewma_ratio >= 2.0:
-            score += 3
-        elif ewma_ratio >= 1.3:
-            score += 2
-        elif ewma_ratio >= 1.1:
-            score += 1
-
-        # Dépassement cycle : impact immédiat
-        if cycle_overrun_s >= 30:
-            score += 2
-        elif cycle_overrun_s >= 10:
-            score += 1
-
-        # Mapping score → label
-        if score >= 6:
-            pred = "CRITICAL"
-        elif score >= 4:
-            pred = "MAJOR"
-        elif score >= 2:
-            pred = "WARNING"
-        else:
-            pred = "OK"
-
-    # --------- 3) fusion : max(base, pred) ---------
-    base_rank = SEVERITY_ORDER.get(base, 0)
-    pred_rank = SEVERITY_ORDER.get(pred, 0)
-
-    final_sev = base if base_rank >= pred_rank else pred
-    return final_sev
-
-
-
-
-# -------------------------
-# SQL STACK
-# -------------------------
-def fetch_similar_events( machine, step_id, code, since_ts):
-    sql = """
-    SELECT ts, duration
-    FROM plc_events
-    WHERE machine = %s
-      AND step_id = %s
-      AND code = %s
-      AND level IN ('ERROR','FAULT','ALARM')
-      AND ts >= %s
-    ORDER BY ts ASC;
-    """
-    return pd.read_sql(sql, db.engine, params=(machine, step_id, code, since_ts) )
-
-
-def fetch_similar_events_adaptive(
-     machine, step_id, code,
-    min_events=10, min_days=3, max_days=30, step_days=2
-):
+def fetch_step_history(machine, step_id, min_events=10, max_days=30):
     now = datetime.now(timezone.utc)
-    days = min_days
+    last_df = None
 
-    while days <= max_days:
+    for days in range(3, max_days + 1, 2):
         since = now - timedelta(days=days)
-        df = fetch_similar_events( machine, step_id, code, since)
-        if len(df) >= min_events:
+
+        df = pd.read_sql(
+            """
+            SELECT ts, duration
+            FROM plc_events
+            WHERE machine = %s
+              AND step_id = %s
+              AND ts >= %s
+              AND duration IS NOT NULL
+            ORDER BY ts ASC
+            """,
+            db.engine,
+            params=(machine, step_id, since),
+        )
+
+        if not df.empty:
+            df = df.copy()
             df["window_days"] = days
-            return df
-        days += step_days
+            last_df = df
 
-    df["window_days"] = max_days
-    return df
+            if len(df) >= min_events:
+                return df
+
+    return last_df
 
 
+# ============================================================
+# ML STEP LEVEL
+# ============================================================
 
-# -------------------------
-# PREDICTION FINALE
-# -------------------------
-def compute_prediction( row):
-    # CONTRAT STRICT : toujours retourner ces clés
+def isolation_forest_scores(values):
+    if len(values) < 10:
+        return None
+
+    X = values.reshape(-1, 1)
+    model = IsolationForest(
+        n_estimators=100,
+        contamination="auto",
+        random_state=42,
+    )
+    model.fit(X)
+
+    scores = -model.decision_function(X)
+    scores = (scores - scores.min()) / (scores.max() - scores.min() + 1e-9)
+    return scores
+
+
+# ============================================================
+# MAIN PREDICTION — ANOMALY IN → ANOMALY ENRICHED
+# ============================================================
+
+def compute_prediction(anomaly: dict) -> dict:
+    """
+    Enrichit UNE anomalie PLC existante avec du prédictif.
+    Input = ligne plc_anomalies (dict)
+    """
+
     result = {
         "events_count": 0,
-        "window_days": 0,
-        "confidence": 0.0,
-        "ewma_ratio": 0.0,
-        "rate_ratio": 0.0,
-        "burstiness": 0.0,
-        "hawkes_score": 0.0,
-        "severity": "NO_HISTORY",
+        "window_days": None,
+        "confidence": "insufficient",
+        "ewma_ratio": None,
+        "rate_ratio": None,
+        "burstiness": None,
+        "hawkes_score": 0,
+        "anomaly_score": anomaly.anomaly_score or 0.0,
+        "severity": anomaly.severity or"NO_HISTORY",
     }
 
-    df = fetch_similar_events_adaptive(
-        row["machine"],
-        row["step_id"],
-        row.get("code")
+    machine = anomaly.machine
+    step_id = anomaly.step_id
+
+    if not machine or not step_id:
+        return result
+
+    hist = fetch_step_history(machine, step_id)
+    if hist is None or hist.empty:
+        return result
+
+    durations = hist["duration"].astype(float).values
+    ts = hist["ts"]
+
+    # --- stats ---
+    ewma = ewma_ratio(durations)
+    hawkes = hawkes_proxy(ts)
+    iso_scores = isolation_forest_scores(durations)
+
+    recent_iso = (
+        float(np.mean(iso_scores[-3:]))
+        if iso_scores is not None else 0.0
     )
 
-    # ⚠️ CAS NORMAL EN TEMPS RÉEL
-    if df is None or len(df) < 1:
-        return result   # ✅ schéma respecté
+    n_events = len(hist)
+    conf_label = confidence_label(n_events)
 
-    ewma = ewma_ratio(df["duration"].values)
-    proxy = hawkes_proxy(df["ts"])
-    h_score = hawkes_score(proxy) if proxy else 0
-    conf_label = confidence_level(len(df))
-    conf_score= CONFIDENCE_MAP[conf_label]
+    # ========================================================
+    # SCORE DE SÉVÉRITÉ
+    # ========================================================
 
-    severity = compute_severity(
-        hawkes_score=h_score,
-        ewma_ratio=ewma,
-        confidence=conf_score,
-        rule_severity=row.get("severity", "OK"),
-        has_step_error=row.get("has_step_error", False),
-        cycle_overrun_s=row.get("duration_overrun_s", 0.0),
-    )
+    score = 0
 
+    if anomaly.rule_anomaly:
+        score += 2
+
+    if ewma and ewma > 1.3:
+        score += 2
+
+    if hawkes and hawkes["rate_ratio"] > 1.5:
+        score += 2
+
+    if recent_iso > 0.7:
+        score += 2
+
+    if score >= 6:
+        severity = "CRITICAL"
+    elif score >= 4:
+        severity = "MAJOR"
+    elif score >= 2:
+        severity = "WARNING"
+    else:
+        severity = "OK"
 
     result.update({
-        "events_count": int(len(df)),
-        "window_days": int(df["window_days"].iloc[0]),
-        "confidence": conf_score, 
-        "confidence_label": conf_label, 
+        "events_count": n_events,
+        "window_days": int(hist["window_days"].iloc[0]),
+        "confidence": conf_label,
         "ewma_ratio": ewma,
-        "rate_ratio": proxy["rate_ratio"] if proxy else 0.0,
-        "burstiness": proxy["burstiness"] if proxy else 0.0,
-        "hawkes_score": h_score,
+        "rate_ratio": hawkes["rate_ratio"] if hawkes else None,
+        "burstiness": hawkes["burstiness"] if hawkes else None,
+        "hawkes_score": score,
+        "anomaly_score": round(recent_iso, 3),
         "severity": severity,
     })
 
     return result
+

@@ -3,6 +3,18 @@ from peft import LoraConfig, get_peft_model
 from config import Config
 import torch
 
+
+from llama_cpp import Llama
+
+def llm():
+    return  Llama(
+    model_path=Config.MODEL_NAME,
+    n_ctx=8192,        # contexte
+    n_threads=8,       # threads CPU (≈ nombre de cœurs)
+    n_batch=512        # batch tokens (perf)
+)
+
+
 def load_tokenizer():
     tokenizer = AutoTokenizer.from_pretrained(Config.MODEL_NAME, use_fast=True, trust_remote_code=True)
 

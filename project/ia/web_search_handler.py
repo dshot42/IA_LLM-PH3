@@ -3,7 +3,7 @@ from sentence_transformers import SentenceTransformer, util
 import torch
 import re
 from config import Config
-import ia.faiss_handler
+from ia.faiss.faiss_handler import apply_tfidf_sort
 
 
 def clean_text(t: str) -> str:
@@ -13,56 +13,56 @@ def clean_text(t: str) -> str:
     t = re.sub(r"\s+", " ", t).strip()
     return t
 
+from functools import lru_cache
+
+@lru_cache(maxsize=1)
+def get_embedder():
+    return SentenceTransformer(Config.RAG_MODEL)
+
 
 def searchWeb(query, top_k=5, min_score=0.30, max_results=5):
-    """
-    Recherche Web optimisée :
-    - DDG text search (gratuit)
-    - Nettoyage snippet
-    - Cosine similarity + densité d’information
-    - TF-IDF boost automatique
-    """
 
-    embedder = SentenceTransformer(Config.RAG_MODEL)
-    tf_prompt, query_vec = faiss_handler.apply_tfidf_sort(query, embedder)
+    embedder = get_embedder()
+    tf_prompt, query_vec = apply_tfidf_sort(query, embedder)
 
     collected = []
 
     with DDGS() as ddgs:
-        ddg_results = ddgs.text(query, max_results=top_k)
+        try:
+            ddg_results = list(ddgs.text(query, max_results=top_k))
+        except Exception as e:
+            print("⚠️ DDG search failed:", e)
+            return []
 
-        for r in ddg_results:
-            title = clean_text(r.get("title", ""))
-            snippet = clean_text(r.get("body", ""))
-            url = r.get("href", "")
+    for r in ddg_results:
+        title = clean_text(r.get("title", ""))
+        snippet = clean_text(r.get("body", ""))
+        url = r.get("href", "")
 
-            if len(snippet) < 25:   # trop court = non utile
-                continue
+        if len(snippet) < 25:
+            continue
 
-            # Embedding snippet
+        try:
             sn_emb = embedder.encode(snippet, convert_to_tensor=True)
-            cos_score = util.cos_sim(query_vec, sn_emb).item()
+        except Exception:
+            continue
 
-            # Score densité d'information (pénalise les snippets trop vagues)
-            density = min(len(snippet) / 300, 1.0)
+        cos_score = util.cos_sim(query_vec, sn_emb).item()
+        density = min(len(snippet) / 300, 1.0)
+        final_score = (cos_score * 0.7) + (density * 0.3)
 
-            # Score final pondéré
-            final_score = (cos_score * 0.7) + (density * 0.3)
+        if final_score >= min_score:
+            collected.append({
+                "title": title,
+                "url": url,
+                "snippet": snippet,
+                "score": final_score,
+                "cosine": cos_score,
+                "density": density,
+            })
 
-            if final_score >= min_score:
-                collected.append({
-                    "title": title,
-                    "url": url,
-                    "snippet": snippet,
-                    "score": final_score,
-                    "cosine": cos_score,
-                    "density": density,
-                })
-
-    # Tri final
     collected.sort(key=lambda x: x["score"], reverse=True)
 
-    # Retirer les doublons de domaine ou titres
     seen_titles = set()
     filtered = []
     for r in collected:
@@ -74,3 +74,4 @@ def searchWeb(query, top_k=5, min_score=0.30, max_results=5):
             break
 
     return filtered
+

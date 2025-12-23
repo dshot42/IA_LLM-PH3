@@ -28,9 +28,9 @@ import {
         </RouterLink>
       </li>
       <li>
-        <RouterLink to="/steps" active-class="active">
+        <RouterLink to="/anomalie" active-class="active">
           <BeakerIcon class="icon" />
-          Step Analyse
+          Anomalie Detector
         </RouterLink>
       </li>
       <li>

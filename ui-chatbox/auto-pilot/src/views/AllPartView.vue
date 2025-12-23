@@ -24,8 +24,6 @@ async function loadParts() {
   }
 }
 
-
-
 let sock: any = null
 onMounted(async () => {
   await Promise.all([loadParts()])

@@ -115,7 +115,11 @@ class PlcAnomaly(db.Model):
         nullable=False,
         default=datetime.utcnow
     )
-
+    
+    event_ts = db.Column(
+        db.DateTime(timezone=True)
+    )
+    part_id = db.Column(db.Text, nullable=False)
     cycle = db.Column(db.Integer, nullable=False)
     machine = db.Column(db.Text, nullable=False)
 
@@ -176,3 +180,21 @@ class PlcAnomaly(db.Model):
         db.DateTime(timezone=True),
         default=datetime.utcnow
     )
+    
+    report_path= db.Column(
+        db.Text,
+        nullable=True    # INFO / WATCH / CRITICAL
+    )
+
+
+from sqlalchemy.inspection import inspect
+
+def model_to_dict(obj, exclude=None):
+    if exclude is None:
+        exclude = set()
+
+    return {
+        c.key: getattr(obj, c.key)
+        for c in inspect(obj).mapper.column_attrs
+        if c.key not in exclude
+    }

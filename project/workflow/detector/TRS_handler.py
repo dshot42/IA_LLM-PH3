@@ -1,7 +1,4 @@
-import os
-import psycopg2
 from datetime import datetime
-from config_plc import DB_CONFIG
 from  workflow.detector.feature_handler import parse_workflow
 
 

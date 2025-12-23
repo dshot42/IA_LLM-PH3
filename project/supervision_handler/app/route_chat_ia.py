@@ -2,17 +2,15 @@ import os
 from flask import Blueprint, jsonify, request, Response,send_file,abort
 from flask_cors import CORS
 import ia.model as model_utils
-import ia.eval
-from config import Config
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-import ia.history_handler
+import ia.eval as eval
 from ia.sql_handler import Database
+from supervision_handler.app.extensions import tokenizer, model
 
 
 chat_ia = Blueprint("chat_ia", __name__, url_prefix="/chat_ia")
 
 # === Routes ===
-@chat_ia.route("/generate", methods=["POST"])
+@chat_ia.post("/generate")
 def generate_faiss_prompt():
     user_ip = get_user_ip(request)
     data = request.get_json()
@@ -21,7 +19,7 @@ def generate_faiss_prompt():
     response_text = eval.faiss_search(user_ip, prompt, model, tokenizer)
     return jsonify({"reply": response_text})
 
-@chat_ia.route("/sql", methods=["POST"])
+@chat_ia.post("/sql")
 def generate_sql_prompt():
     user_ip = get_user_ip(request)
     data = request.get_json()
@@ -32,7 +30,7 @@ def generate_sql_prompt():
     return Response(response_text, mimetype="text/plain")
 
         
-@chat_ia.route("/prompt/image", methods=["POST"])
+@chat_ia.post("/prompt/image")
 def generate_image_prompt():
     user_ip = get_user_ip(request)
     data = request.get_json()
@@ -74,5 +72,7 @@ def test_prompt ():
     print("prompt : " + query)
     response_text = eval.faiss_search("none", query, model, tokenizer) 
     # attendu : aucun faiss trouvé -> prompt sur LLM ou recherche internet
+
+
 
 

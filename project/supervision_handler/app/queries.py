@@ -5,6 +5,11 @@ SELECT COUNT(*)::bigint AS total
 FROM part;
 """
 
+ANOMALIES_COUNT = """
+SELECT COUNT(*)::bigint AS total
+FROM plc_anomalies;
+"""
+
 PARTS_PAGE = """
 SELECT
   external_part_id AS part_id,
@@ -123,49 +128,38 @@ SELECT
 
 
 LAST_EVENT_BY_TS = """
-SELECT
-    ts,
-    part_id,
-    machine,
-    level,
-    code,
-    step_id,
-    step_name
+SELECT *
 FROM plc_events
 WHERE ts = %s
 LIMIT 1
 """
 
+EVENT_BY_PART = """
+SELECT *
+FROM plc_events
+WHERE part_id = %s
+ORDER BY ts ASC
+"""
+
 LIST_ANOMALIES = """
-  SELECT
-      id,
-      ts,
-      cycle,
-      machine,
-      step_id,
-      step_name,
-      anomaly_score,
-      rule_anomaly,
-      rule_reasons,
-      has_step_error,
-      n_step_errors,
-      cycle_duration_s,
-      duration_overrun_s,
-      events_count,
-      window_days,
-      ewma_ratio,
-      rate_ratio,
-      burstiness,
-      hawkes_score,
-      confidence,
-      severity
-  FROM plc_anomalies
-  ORDER BY
-      ts DESC,
+  SELECT *
+      FROM plc_anomalies
+      ORDER BY
+      id DESC,
       anomaly_score DESC
-  LIMIT 500;
+      LIMIT %s OFFSET %s;
 """
         
+ANOMALIES_BY_PART_ID = """
+  SELECT *
+      FROM plc_anomalies
+      WHERE part_id= %s
+      ORDER BY
+      id ASC,
+      anomaly_score DESC
+
+"""
+               
         
 # ============================
 # PRODUCTION STEPS
@@ -177,17 +171,9 @@ FROM production_step
 """
 
 PRODUCTION_STEPS_PAGE = """
-SELECT
-    ps.id,
-    ps.step_code,
-    ps.name,
-    ps.description,
-    ps.machine_id,
-    m.name AS machine_name,
-    ps.is_technical,
-    ps.created_at
-FROM production_step ps
-LEFT JOIN machine m ON m.id = ps.machine_id
-ORDER BY ps.step_code ASC
-LIMIT %s OFFSET %s
-"""
+  SELECT *
+  FROM production_step ps
+  LEFT JOIN machine m ON m.id = ps.machine_id
+  ORDER BY ps.step_code ASC
+  LIMIT %s OFFSET %s
+  """
