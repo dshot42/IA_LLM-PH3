@@ -3,8 +3,8 @@ package supervision.industrial.auto_pilot.service.detector;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import supervision.industrial.auto_pilot.model.ProductionStep;
-import supervision.industrial.auto_pilot.repository.ProductionStepRepository;
+import dependancy_bundle.model.ProductionStep;
+import dependancy_bundle.repository.ProductionStepRepository;
 import supervision.industrial.auto_pilot.service.detector.dto.NominalStep;
 
 import java.util.*;

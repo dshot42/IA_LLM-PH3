@@ -2,7 +2,7 @@ package supervision.industrial.auto_pilot.service.detector.rules;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import supervision.industrial.auto_pilot.model.PlcEvent;
+import dependancy_bundle.model.PlcEvent;
 import supervision.industrial.auto_pilot.service.detector.dto.NominalStep;
 
 

@@ -1,7 +1,7 @@
 package supervision.industrial.auto_pilot.dto;
 
-import supervision.industrial.auto_pilot.model.PlcAnomaly;
-import supervision.industrial.auto_pilot.model.PlcEvent;
+import dependancy_bundle.model.PlcAnomaly;
+import dependancy_bundle.model.PlcEvent;
 
 import java.util.List;
 

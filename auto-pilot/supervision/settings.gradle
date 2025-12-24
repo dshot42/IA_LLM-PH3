@@ -1,1 +1,3 @@
 rootProject.name = 'auto-pilot'
+
+includeBuild("../dependancy_bundle")

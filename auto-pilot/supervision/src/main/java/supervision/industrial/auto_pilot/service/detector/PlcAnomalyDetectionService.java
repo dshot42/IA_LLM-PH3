@@ -5,11 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
-import supervision.industrial.auto_pilot.model.PlcAnomaly;
-import supervision.industrial.auto_pilot.model.PlcEvent;
-import supervision.industrial.auto_pilot.repository.PlcAnomalyRepository;
-import supervision.industrial.auto_pilot.repository.PlcEventRepository;
-import supervision.industrial.auto_pilot.model.enumeration.Severity;
+import dependancy_bundle.model.PlcAnomaly;
+import dependancy_bundle.model.PlcEvent;
+import dependancy_bundle.repository.PlcAnomalyRepository;
+import dependancy_bundle.repository.PlcEventRepository;
+import dependancy_bundle.model.enumeration.Severity;
 
 import supervision.industrial.auto_pilot.service.detector.dto.NominalStep;
 import supervision.industrial.auto_pilot.service.detector.dto.OccurrenceStats;
@@ -76,7 +76,7 @@ public class PlcAnomalyDetectionService {
 
         long errorHits = hits.stream().filter(h -> h.ruleCode().contains("ERROR")).count();
         a.setHasStepError(errorHits > 0);
-        a.setnStepErrors((int) errorHits);
+        a.setNStepErrors((int) errorHits);
 
         // 5) Predictive signals (EWMA / rate / burstiness / Hawkes-like)
         PredictiveSignals sig = computePredictiveSignals(event);

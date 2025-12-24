@@ -1,7 +1,7 @@
 package supervision.industrial.auto_pilot.service.prompt;
 
 import org.springframework.stereotype.Service;
-import supervision.industrial.auto_pilot.model.PlcAnomaly;
+import dependancy_bundle.model.PlcAnomaly;
 
 @Service
 public class PromptBuilderService {

@@ -1,8 +1,8 @@
 package supervision.industrial.auto_pilot.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import supervision.industrial.auto_pilot.model.PlcAnomaly;
-import supervision.industrial.auto_pilot.repository.PlcAnomalyRepository;
+import dependancy_bundle.model.PlcAnomaly;
+import dependancy_bundle.repository.PlcAnomalyRepository;
 import supervision.industrial.auto_pilot.websocket.AnomalyWebSocketHandler;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;

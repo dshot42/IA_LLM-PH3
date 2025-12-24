@@ -1,7 +1,7 @@
 package supervision.industrial.auto_pilot.controller;
 
 import supervision.industrial.auto_pilot.dto.PageResponse;
-import supervision.industrial.auto_pilot.model.PlcAnomaly;
+import dependancy_bundle.model.PlcAnomaly;
 import supervision.industrial.auto_pilot.service.AnomalieService;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;

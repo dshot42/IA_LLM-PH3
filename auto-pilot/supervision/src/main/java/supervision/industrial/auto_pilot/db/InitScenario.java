@@ -1,15 +1,15 @@
 package supervision.industrial.auto_pilot.db;
 
+import dependancy_bundle.repository.ProductionScenarioRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Service;
-import supervision.industrial.auto_pilot.model.ProductionScenario;
-import supervision.industrial.auto_pilot.model.ProductionScenarioStep;
-import supervision.industrial.auto_pilot.model.ProductionStep;
-import supervision.industrial.auto_pilot.model.enumeration.ProductionHandler;
-import supervision.industrial.auto_pilot.repository.ProductionScenarioRepository;
-import supervision.industrial.auto_pilot.repository.ProductionScenarioStepRepository;
-import supervision.industrial.auto_pilot.repository.ProductionStepRepository;
+import dependancy_bundle.model.ProductionScenario;
+import dependancy_bundle.model.ProductionScenarioStep;
+import dependancy_bundle.model.ProductionStep;
+import dependancy_bundle.model.enumeration.ProductionHandler;
+import dependancy_bundle.repository.ProductionScenarioStepRepository;
+import dependancy_bundle.repository.ProductionStepRepository;
 
 import java.util.List;
 

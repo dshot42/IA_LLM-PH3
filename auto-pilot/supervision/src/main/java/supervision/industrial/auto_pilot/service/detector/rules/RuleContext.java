@@ -2,7 +2,7 @@ package supervision.industrial.auto_pilot.service.detector.rules;
 
 
 
-import supervision.industrial.auto_pilot.model.PlcEvent;
+import dependancy_bundle.model.PlcEvent;
 import supervision.industrial.auto_pilot.service.detector.dto.NominalStep;
 
 import java.time.OffsetDateTime;

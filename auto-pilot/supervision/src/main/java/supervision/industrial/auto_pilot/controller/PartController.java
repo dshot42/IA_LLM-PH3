@@ -2,7 +2,7 @@ package supervision.industrial.auto_pilot.controller;
 
 import supervision.industrial.auto_pilot.dto.PageResponse;
 import supervision.industrial.auto_pilot.dto.PartDetailResponse;
-import supervision.industrial.auto_pilot.model.Part;
+import dependancy_bundle.model.Part;
 import supervision.industrial.auto_pilot.service.PartHandler;
 import org.springframework.web.bind.annotation.*;
 

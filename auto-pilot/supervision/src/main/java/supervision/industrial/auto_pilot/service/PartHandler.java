@@ -1,12 +1,12 @@
 package supervision.industrial.auto_pilot.service;
 
 import supervision.industrial.auto_pilot.dto.PartDetailResponse;
-import supervision.industrial.auto_pilot.model.Part;
-import supervision.industrial.auto_pilot.model.PlcAnomaly;
-import supervision.industrial.auto_pilot.model.PlcEvent;
-import supervision.industrial.auto_pilot.repository.PartRepository;
-import supervision.industrial.auto_pilot.repository.PlcAnomalyRepository;
-import supervision.industrial.auto_pilot.repository.PlcEventRepository;
+import dependancy_bundle.model.Part;
+import dependancy_bundle.model.PlcAnomaly;
+import dependancy_bundle.model.PlcEvent;
+import dependancy_bundle.repository.PartRepository;
+import dependancy_bundle.repository.PlcAnomalyRepository;
+import dependancy_bundle.repository.PlcEventRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 

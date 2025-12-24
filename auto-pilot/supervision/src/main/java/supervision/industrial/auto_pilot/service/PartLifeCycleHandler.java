@@ -1,16 +1,16 @@
 package supervision.industrial.auto_pilot.service;
 
+import dependancy_bundle.model.Machine;
+import dependancy_bundle.model.Part;
+import dependancy_bundle.model.PlcEvent;
+import dependancy_bundle.model.ProductionStep;
+import dependancy_bundle.repository.MachineRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import supervision.industrial.auto_pilot.model.Machine;
-import supervision.industrial.auto_pilot.model.Part;
-import supervision.industrial.auto_pilot.model.PlcEvent;
-import supervision.industrial.auto_pilot.model.ProductionStep;
-import supervision.industrial.auto_pilot.repository.MachineRepository;
-import supervision.industrial.auto_pilot.repository.PartRepository;
-import supervision.industrial.auto_pilot.repository.PlcEventRepository;
-import supervision.industrial.auto_pilot.repository.ProductionStepRepository;
+import dependancy_bundle.repository.PartRepository;
+import dependancy_bundle.repository.PlcEventRepository;
+import dependancy_bundle.repository.ProductionStepRepository;
 import supervision.industrial.auto_pilot.service.detector.PlcAnomalyDetectionService;
 import supervision.industrial.auto_pilot.service.detector.WorkflowNominalService;
 
