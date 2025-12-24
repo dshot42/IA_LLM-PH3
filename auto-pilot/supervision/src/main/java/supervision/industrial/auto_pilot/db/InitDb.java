@@ -2,6 +2,7 @@ package supervision.industrial.auto_pilot.db;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import supervision.industrial.auto_pilot.model.Line;
 import supervision.industrial.auto_pilot.model.Machine;
 import supervision.industrial.auto_pilot.model.ProductionStep;
@@ -21,6 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Configuration
 public class InitDb {
 
+    @Autowired
+    private InitScenario initScenario;
 
     // =========================
     // BOOTSTRAP RUNNER
@@ -102,11 +105,13 @@ public class InitDb {
                     ps.setStepCode(s.id());
                     ps.setName(s.name());
                     ps.setDescription(s.description());
-                    ps.setMachineId(machine.getId().intValue());
+                    ps.setMachine(machine);
+                    ps.setNominalDurationS(s.durationS());
                     stepRepo.save(ps);
                 }
             }
         }
+        initScenario.generateNominalScenario ();
     }
 
     // =========================
@@ -153,7 +158,9 @@ public class InitDb {
     public record StepDTO(
             String id,
             String name,
-            String description
+            String description,
+            @JsonProperty("duration_s")
+            Double durationS
     ) {
     }
 }

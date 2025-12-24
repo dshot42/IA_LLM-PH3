@@ -377,4 +377,6 @@ public class PlcAnomaly {
     public void setReportPath(String reportPath) {
         this.reportPath = reportPath;
     }
+
+
 }

@@ -1,5 +1,7 @@
 package supervision.industrial.auto_pilot.service;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
 import supervision.industrial.auto_pilot.dto.PartDetailResponse;
 import supervision.industrial.auto_pilot.model.Part;
 import supervision.industrial.auto_pilot.model.PlcAnomaly;
@@ -7,19 +9,17 @@ import supervision.industrial.auto_pilot.model.PlcEvent;
 import supervision.industrial.auto_pilot.repository.PartRepository;
 import supervision.industrial.auto_pilot.repository.PlcAnomalyRepository;
 import supervision.industrial.auto_pilot.repository.PlcEventRepository;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
-public class PartService {
+public class WorkorderHandler {
 
     private final PartRepository partRepo;
     private final PlcEventRepository eventRepo;
     private final PlcAnomalyRepository anomalyRepo;
 
-    public PartService(PartRepository partRepo, PlcEventRepository eventRepo, PlcAnomalyRepository anomalyRepo) {
+    public WorkorderHandler(PartRepository partRepo, PlcEventRepository eventRepo, PlcAnomalyRepository anomalyRepo) {
         this.partRepo = partRepo;
         this.eventRepo = eventRepo;
         this.anomalyRepo = anomalyRepo;

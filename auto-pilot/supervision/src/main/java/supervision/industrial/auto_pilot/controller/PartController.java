@@ -3,7 +3,7 @@ package supervision.industrial.auto_pilot.controller;
 import supervision.industrial.auto_pilot.dto.PageResponse;
 import supervision.industrial.auto_pilot.dto.PartDetailResponse;
 import supervision.industrial.auto_pilot.model.Part;
-import supervision.industrial.auto_pilot.service.PartService;
+import supervision.industrial.auto_pilot.service.PartHandler;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -12,9 +12,9 @@ import java.util.List;
 @RequestMapping("/api/parts")
 public class PartController {
 
-    private final PartService service;
+    private final PartHandler service;
 
-    public PartController(PartService service) {
+    public PartController(PartHandler service) {
         this.service = service;
     }
 

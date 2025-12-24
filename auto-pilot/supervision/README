@@ -1,0 +1,5 @@
+when part finish => PlcAnomaly anomaly = plcAnomalyDetectionService.detectAndPersist(event);
+
+retablir le part service du python ! ! !
+
+surment la severity a revoir

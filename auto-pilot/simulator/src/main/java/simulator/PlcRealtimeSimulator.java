@@ -216,6 +216,8 @@ public class PlcRealtimeSimulator {
                             duration,
                             Map.of()
                     );
+
+                    System.out.println("insert event " +step.name());
                 }
             }
 

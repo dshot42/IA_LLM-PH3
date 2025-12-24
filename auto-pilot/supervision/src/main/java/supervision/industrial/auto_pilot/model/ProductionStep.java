@@ -1,16 +1,19 @@
 package supervision.industrial.auto_pilot.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
+
+@Getter
+@Setter
 @Entity
 @Table(
-        name = "production_step",
-        indexes = {
-                @Index(name = "idx_production_step_step_code", columnList = "step_code"),
-                @Index(name = "idx_production_step_machine_id", columnList = "machine_id")
-        }
+        name = "production_step"
 )
 public class ProductionStep {
 
@@ -36,11 +39,9 @@ public class ProductionStep {
     @Column(name = "duration")
     private Long duration;
 
-    // =========================
-    // Machine reference (FK)
-    // =========================
-    @Column(name = "machine_id", nullable = false)
-    private Integer machineId;    // accès rapide sans JOIN
+
+    @Column(name = "nominal_duration_s", nullable = false)
+    private Double nominalDurationS;
 
     /**
      * Relation ORM vers Machine
@@ -49,12 +50,7 @@ public class ProductionStep {
      * - lecture seule côté relation
      */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(
-            name = "machine_id",
-            referencedColumnName = "id",
-            insertable = false,
-            updatable = false
-    )
+    @JoinColumn(name = "machine_id", nullable = false)
     private Machine machine;
 
     // =========================
@@ -79,59 +75,9 @@ public class ProductionStep {
         }
     }
 
-    // =========================
-    // Getters / Setters
-    // =========================
+    @OneToMany(mappedBy = "productionStep", fetch = FetchType.LAZY)
+    @JsonIgnore
+    private List<ProductionScenarioStep> productionScenarioSteps;
 
-    public Long getId() {
-        return id;
-    }
 
-    public String getStepCode() {
-        return stepCode;
-    }
-
-    public void setStepCode(String stepCode) {
-        this.stepCode = stepCode;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public Integer getMachineId() {
-        return machineId;
-    }
-
-    public void setMachineId(Integer machineId) {
-        this.machineId = machineId;
-    }
-
-    public Machine getMachine() {
-        return machine;
-    }
-
-    public Boolean getIsTechnical() {
-        return isTechnical;
-    }
-
-    public void setIsTechnical(Boolean isTechnical) {
-        this.isTechnical = isTechnical;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
 }
