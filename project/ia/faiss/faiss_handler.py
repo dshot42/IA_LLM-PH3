@@ -8,7 +8,11 @@ from ia.history_handler import filter_relevant_history
 # 🔹 Paramètres
 INDEX_FILE = os.path.join(Config.INDEX_FAISS, "faiss_index.idx")
 META_FILE = os.path.join(Config.INDEX_FAISS, "faiss_metadata.pkl")
-DIM = 768  # dimension forcée pour BGE
+
+INDEX_WORKFLOW_FILE = os.path.join(Config.INDEX_FAISS, "faiss_index_workflow.idx")
+META_WORKFLOW_FILE = os.path.join(Config.INDEX_FAISS, "faiss_metadata_workflow.pkl")
+
+DIM = 1024  # dimension forcée pour BGE
 
 # ----------------- Préprocessing stopwords -----------------
 def preprocess_stopwords():
@@ -21,10 +25,10 @@ def preprocess_stopwords():
     return list(set(clean))
 
 # ----------------- Projection embeddings -----------------
-def project_to_768(vec):
+def project_to_1024(vec):
     """
     vec : np.array shape (n, 1024)
-    retourne : np.array shape (n, 768)
+    retourne : np.array shape (n, 1024)
     """
     if vec.shape[1] == DIM:
         return vec.astype(np.float32)
@@ -34,13 +38,19 @@ def project_to_768(vec):
     return np.dot(vec, proj)
 
 # ----------------- Index FAISS -----------------
-def load_faiss_index():
-    if not (os.path.exists(INDEX_FILE) and os.path.exists(META_FILE)):
-        return None, None, None, None
+def load_faiss_index(workflow: bool):
+    if workflow:
+        if not (os.path.exists(INDEX_WORKFLOW_FILE) and os.path.exists(META_WORKFLOW_FILE)):
+            return None, None, None, None
+        index = faiss.read_index(INDEX_WORKFLOW_FILE)
+        meta_path = META_WORKFLOW_FILE
+    else:
+        if not (os.path.exists(INDEX_FILE) and os.path.exists(META_FILE)):
+            return None, None, None, None
+        index = faiss.read_index(INDEX_FILE)
+        meta_path = META_FILE
 
-    index = faiss.read_index(INDEX_FILE)
-
-    with open(META_FILE, "rb") as f:
+    with open(meta_path, "rb") as f:
         data = pickle.load(f)
 
     chunks = data["chunks"]
@@ -69,27 +79,64 @@ def load_faiss_index():
     return chunks, metadata, embedder, index
 
 
-def build_faiss_index(chunks, metadata):
+def save_faiss_index(index, chunks, metadata, workflow: bool = False):
+    """
+    Sauvegarde :
+    - index FAISS (.idx)
+    - chunks + metadata (.pkl)
+    """
+
+    if workflow:
+        index_path = INDEX_WORKFLOW_FILE
+        meta_path = META_WORKFLOW_FILE
+    else:
+        index_path = INDEX_FILE
+        meta_path = META_FILE
+
+    os.makedirs(os.path.dirname(index_path), exist_ok=True)
+
+    # --- Sauvegarde FAISS ---
+    faiss.write_index(index, index_path)
+
+    # --- Sauvegarde metadata ---
+    with open(meta_path, "wb") as f:
+        pickle.dump(
+            {
+                "chunks": chunks,
+                "metadata": metadata
+            },
+            f
+        )
+
+    print(
+        f"💾 FAISS index sauvegardé :\n"
+        f"   - {index_path}\n"
+        f"   - {meta_path}\n"
+        f"   - vectors = {index.ntotal}, dim = {index.d}"
+    )
+
+
+def build_faiss_index(chunks, metadata,workflow):
     if not chunks:
         return [], [], None, None
 
     embedder = SentenceTransformer(Config.RAG_MODEL)
     embeddings = embedder.encode(chunks, convert_to_numpy=True).astype("float32")
 
-    # Projection sur 768
-    embeddings = project_to_768(embeddings)
+    # Projection sur 1024
+    embeddings = project_to_1024(embeddings)
     embeddings = sk_normalize(embeddings, axis=1)
 
     index = faiss.IndexFlatIP(DIM)
     index.add(embeddings)
-    save_faiss_index(index, chunks, metadata)
+    save_faiss_index(index, chunks, metadata,workflow)
 
     return chunks, metadata, embedder, index
 
-def faiss_index_handler(new_chunks, new_metadata):
-    chunks, metadata, embedder, index = load_faiss_index()
+def faiss_index_handler(new_chunks, new_metadata, workflow:bool):
+    chunks, metadata, embedder, index = load_faiss_index(workflow)
     if not chunks:
-        return build_faiss_index(new_chunks, new_metadata)
+        return build_faiss_index(new_chunks, new_metadata,workflow)
     
     existing_files = [m.get("path") for m in metadata]
     new_entries = [(c, m) for c, m in zip(new_chunks, new_metadata) if m.get("path") not in existing_files]
@@ -100,14 +147,14 @@ def faiss_index_handler(new_chunks, new_metadata):
     chunks_to_add, metadata_to_add = zip(*new_entries)
     embeddings_to_add = embedder.encode(list(chunks_to_add), convert_to_numpy=True).astype("float32")
 
-    # Projection sur 768
-    embeddings_to_add = project_to_768(embeddings_to_add)
+    # Projection sur 1024
+    embeddings_to_add = project_to_1024(embeddings_to_add)
     embeddings_to_add = sk_normalize(embeddings_to_add, axis=1)
 
     index.add(embeddings_to_add)
     chunks.extend(chunks_to_add)
     metadata.extend(metadata_to_add)
-    save_faiss_index(index, chunks, metadata)
+    save_faiss_index(index, chunks, metadata,workflow)
     return chunks, metadata, embedder, index
 
 # ----------------- TF-IDF boost -----------------
@@ -261,7 +308,7 @@ from sklearn.preprocessing import normalize as sk_normalize
 
 def retrieve(user_ip: str, query: str, top_k: int = Config.nb_chunks_to_use, query_weight: float = 1):
     print("--- FAISS →  filtrage fin with BM25 rerank ---")
-    chunks, metadata, embedder, index = load_faiss_index()
+    chunks, metadata, embedder, index = load_faiss_index(False)
     if not embedder or not chunks or not index:
         return []
 
@@ -280,7 +327,7 @@ def retrieve(user_ip: str, query: str, top_k: int = Config.nb_chunks_to_use, que
     query_vec = augment_query_with_metadata(query_vec, query, metadata, embedder)
 
     # ---------------- FAISS retrieval sur tout le corpus
-    query_vec = project_to_768(query_vec)
+    query_vec = project_to_1024(query_vec)
     query_vec = sk_normalize(query_vec, axis=1)
     sims, indices = index.search(query_vec, top_k)
     faiss_scores, _, _, _ = ultra_reranker_scores(sims[0])
