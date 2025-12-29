@@ -1,7 +1,7 @@
-package supervision.industrial.auto_pilot.service.mapper;
+package supervision.industrial.auto_pilot.workflow.mapper;
 
 import dependancy_bundle.model.PlcAnomaly;
-import supervision.industrial.auto_pilot.service.detector.dto.AnomalyToPromptDto;
+import supervision.industrial.auto_pilot.workflow.detector.dto.AnomalyToPromptDto;
 
 public class PlcAnomalyMapper {
 
@@ -25,7 +25,7 @@ public class PlcAnomalyMapper {
                 a.getCycle(),
 
                 a.getMachine() != null
-                        ? a.getMachine().getName()
+                        ? a.getMachine().getName() +" - "+ a.getMachine().getDescription()
                         : null,
 
                 a.getProductionStep() != null

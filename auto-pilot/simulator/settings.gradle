@@ -1,3 +1,6 @@
 rootProject.name = 'simulator'
 
-includeBuild("../dependancy_bundle")
+include(
+        "dependancy_bundle"
+)
+project(":dependancy_bundle").projectDir = file("../dependancy_bundle")

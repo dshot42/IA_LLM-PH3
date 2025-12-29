@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.service.detector;
+package supervision.industrial.auto_pilot.workflow.detector;
 
 import dependancy_bundle.model.Machine;
 import dependancy_bundle.model.ProductionStep;
@@ -6,8 +6,8 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.Tuple;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import supervision.industrial.auto_pilot.service.detector.dto.OccurrenceStats;
-import supervision.industrial.auto_pilot.service.detector.dto.StepIntervalStats;
+import supervision.industrial.auto_pilot.workflow.detector.dto.OccurrenceStats;
+import supervision.industrial.auto_pilot.workflow.detector.dto.StepIntervalStats;
 
 import java.time.OffsetDateTime;
 import java.util.List;

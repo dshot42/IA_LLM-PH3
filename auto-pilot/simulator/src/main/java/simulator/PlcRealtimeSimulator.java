@@ -1,242 +1,236 @@
 package simulator;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dependancy_bundle.model.*;
+import dependancy_bundle.repository.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.*;
 
-/**
- * Simulateur temps réel PLC
- * - 100% basé sur le workflow BDD
- * - timestamps cohérents avec durées
- * - anomalies industrielles réalistes
- * - compatible détection anomalies / LLM
- */
 @Service
+@RequiredArgsConstructor
 public class PlcRealtimeSimulator {
 
-    // =========================
-    // CONFIG TEMPS
-    // =========================
-    private final double speedFactor = 1.0;   // 1.0 = temps réel
-    private final double jitterRatio = 0.10;  // +/- 10 %
+
+    private final PlcEventRepository plcEventRepository;
+    private final MachineRepository machineRepository;
+    private final WorkorderRepository workorderRepository;
+    private final PartRepository partRepository;
+    private final ProductionScenarioRepository productionScenarioRepository;
+    private final PlcAnomalyRepository plcAnomalyRepository;
+    private final RunnerConstanteRepository runnerConstanteRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Random rnd = new Random();
+
+    private final double speedFactor = 1.0;
+    private final double jitterRatio = 0.10;
 
     // =========================
     // CONFIG ANOMALIES
     // =========================
-    private final double slowdownMultiplier = 2.0; // x2 sur certains steps
-    private final double dephasingDelayS = 0.6;
+    private final double slowdownMultiplier = 2.0;
+    private final double dephasingDelayS = 3;
 
-    private final double pSlowdown = 0.20;   // 20% des cycles
-    private final double pDephasing = 0.15;  // 15% des cycles
-    private final double pPlcError = 0.10;   // 10% des cycles
-
-    // =========================
-    // DEPENDENCIES
-    // =========================
-    private final PlcEventDao dao;
-    private final WorkflowLoader workflowLoader;
-
-    private final Random rnd = new Random();
-
-    public PlcRealtimeSimulator(
-            PlcEventDao dao,
-            WorkflowLoader workflowLoader
-    ) {
-        this.dao = dao;
-        this.workflowLoader = workflowLoader;
-    }
+    private final double pSlowdown = 0.20;
+    private final double pDephasing = 0.15;
+    private final double pPlcError = 0.10;
+    private final double pSkipStep = 0.12; // 🆕 skip step
 
     // =========================
     // MAIN LOOP
     // =========================
+
+    private Workorder createWorkorder() {
+        Workorder wo = new Workorder();
+        wo.setNbPartToProduce(100L);
+        wo.setStatus("IN_PROGRESS");
+        wo.setProductionScenario(
+                productionScenarioRepository.getProductionScenarioByName("NOMINAL")
+        );
+        return workorderRepository.save(wo);
+    }
+
+    public Part createPart(String externalPartId) {
+        Part p = new Part();
+        p.setExternalPartId(externalPartId);
+        p.setLineId(1);
+        p.setStatus("IN_PROGRESS");
+        return partRepository.save(p);
+    }
+
+    @Transactional
+    public void clearDb() {
+        plcAnomalyRepository.truncatePlcAnomalies();
+        plcEventRepository.truncatePlcEvents();
+        partRepository.truncateParts();
+        workorderRepository.truncateWorkorders();
+    }
+
+
     public void runForever() {
+        RunnerConstante runnerConstante = runnerConstanteRepository.findAll().stream().findFirst().get();
+        runnerConstante.setLastAnomalyAnalise(0L);
+        runnerConstante.setLastCurrentEvent(0L);
+        runnerConstanteRepository.save(runnerConstante);
+        clearDb();
 
-        // 🔹 Charger la ligne depuis la BDD
-        WorkflowLoader.LineDto line = new WorkflowLoader.LineDto(1L);
+        List<Machine> machines =
+                machineRepository.findByLineIdOrderByIdAsc(1);
 
-        // 🔹 Charger le workflow runtime depuis la BDD
-        WorkflowLoader.WorkflowDefDb wf =
-                workflowLoader.loadWorkflow(line);
-
-        // 🔹 Reset tables
-        dao.clearTables();
+        Workorder wo = createWorkorder();
 
         int cycle = 1;
         int partSeq = 1;
 
         while (true) {
 
-            String partId = String.format("P%06d", partSeq++);
-            dao.insertPart(partId);
-
+            Part part = createPart(String.format("P%06d", partSeq++));
             SimClock clock = new SimClock(OffsetDateTime.now());
 
-            // =========================
-            // ANOMALIES ACTIVES (aléatoires)
-            // =========================
             boolean slowdownM2 = rnd.nextDouble() < pSlowdown;
             boolean dephasing = rnd.nextDouble() < pDephasing;
             boolean plcError = rnd.nextDouble() < pPlcError;
 
-            // =========================
-            // CYCLE START
-            // =========================
-            dao.insertEvent(
-                    clock.now(),
-                    partId,
-                    "SYSTEM",
-                    "INFO",
-                    "SIM",
-                    "CYCLE_START",
-                    cycle,
-                    "S1",
-                    "CYCLE",
-                    null,
-                    Map.of(
-                            "slowdownM2", slowdownM2,
-                            "dephasing", dephasing,
-                            "plcError", plcError
-                    )
-            );
+            for (Machine machine : machines) {
 
-            // =========================
-            // MACHINES
-            // =========================
-            for (String machine : wf.machinesOrder()) {
+                List<ProductionStep> steps = machine.getProductionSteps();
+                if (steps == null || steps.isEmpty()) continue;
 
-                List<WorkflowLoader.StepDef> steps =
-                        wf.microSteps().get(machine);
+                double nominalMachine = machine.getNominalDurationS();
+                List<Double> baseDurations = splitNominal(nominalMachine, steps);
 
-                double nominalMachine =
-                        wf.machinesNominalS().get(machine);
+                int expectedIndex = 0;
 
-                List<Double> baseDurations =
-                        splitNominal(nominalMachine, steps);
-
-                // =========================
-                // DEPHASING (désynchro Grafcet)
-                // =========================
-                if (dephasing && machine.equals("M2")) {
-                    dao.insertEvent(
-                            clock.now(),
-                            partId,
-                            machine,
-                            "INFO",
-                            "SIM",
-                            "DEPHASING_DELAY",
-                            cycle,
-                            "M2.01",
-                            "WAIT_M1_READY",
-                            dephasingDelayS,
-                            Map.of("delay_s", dephasingDelayS)
-                    );
-                    clock.advanceSeconds(dephasingDelayS);
-                    sleepSim(dephasingDelayS);
-                }
-
-                // =========================
-                // STEPS
-                // =========================
                 for (int i = 0; i < steps.size(); i++) {
 
-                    WorkflowLoader.StepDef step = steps.get(i);
+                    ProductionStep step = steps.get(i);
+
+                    // =========================
+                    // STEP SKIP (ANOMALY)
+                    // =========================
+                    boolean skipStep =
+                            rnd.nextDouble() < pSkipStep
+                                    && machine.getCode().equals("M2")
+                                    && Set.of("M2.07", "M2.08").contains(step.getStepCode());
+
+                    if (skipStep) {
+                        System.out.println(
+                                "[ANOMALY][STEP_SKIP] machine=" + machine.getCode()
+                                        + " part=" + part.getExternalPartId()
+                                        + " cycle=" + cycle
+                                        + " step=" + step.getStepCode()
+                        );
+                        continue; // ⛔ step non exécuté
+                    }
+
+                    // =========================
+                    // STEP ORDER CHECK (INCHANGÉ)
+                    // =========================
+                    if (i != expectedIndex) {
+                        System.out.println(
+                                "[ANOMALY][STEP_ORDER] machine=" + machine.getCode()
+                                        + " part=" + part.getExternalPartId()
+                                        + " cycle=" + cycle
+                                        + " expected_index=" + expectedIndex
+                                        + " actual_index=" + i
+                                        + " step=" + step.getStepCode()
+                        );
+                    }
+                    expectedIndex++;
+
                     double duration = jitter(baseDurations.get(i));
 
-                    // ---------- SLOWDOWN M2 ----------
+                    // =========================
+                    // SLOWDOWN (INCHANGÉ)
+                    // =========================
                     if (slowdownM2
-                            && machine.equals("M2")
-                            && Set.of("M2.07", "M2.08", "M2.12").contains(step.id())) {
+                            && machine.getCode().equals("M2")
+                            && Set.of("M2.07", "M2.08", "M2.12")
+                            .contains(step.getStepCode())) {
                         duration *= slowdownMultiplier;
                     }
 
-                    // ---------- STEP START ----------
-                    dao.insertEvent(
+                    // =========================
+                    // DEPHASING = OVERUN TRS
+                    // =========================
+                    if (dephasing && machine.getCode().equals("M2")) {
+                        duration = duration * dephasingDelayS; // 🔥 overrun réel
+                        System.out.println("Dephasing " + step.getStepCode());
+                    }
+
+                    // =========================
+                    // STEP START
+                    // =========================
+                    persistEvent(
                             clock.now(),
-                            partId,
+                            part,
                             machine,
+                            step,
                             "INFO",
                             "STEP",
                             "STEP",
                             cycle,
-                            step.id(),
-                            step.name(),
                             duration,
                             Map.of(
                                     "slowdown", slowdownM2,
-                                    "dephasing", dephasing
-                            )
+                                    "dephasing", dephasing,
+                                    "skip", false
+                            ),
+                            wo
                     );
 
-                    // ---------- PLC ERROR ----------
+
                     if (plcError
-                            && machine.equals("M2")
-                            && Set.of("M2.07", "M2.08").contains(step.id())
+                            && machine.getCode().equals("M2")
+                            && Set.of("M2.07", "M2.08")
+                            .contains(step.getStepCode())
                             && rnd.nextDouble() < 0.6) {
 
                         double errDur = Math.max(duration * 0.3, 0.5);
+                        System.out.println("ERROR " + step.getStepCode());
 
-                        dao.insertEvent(
+                        persistEvent(
                                 clock.now(),
-                                partId,
+                                part,
                                 machine,
+                                step,
                                 "ERROR",
                                 "E-M2-011",
                                 "SPINDLE_OVERCURRENT",
                                 cycle,
-                                step.id(),
-                                step.name(),
                                 errDur,
-                                Map.of(
-                                        "error", true,
-                                        "cause", "OVERLOAD",
-                                        "linked_slowdown", slowdownM2
-                                )
+                                Map.of("error", true),
+                                wo
                         );
 
                         clock.advanceSeconds(errDur);
                         sleepSim(errDur);
                     }
 
-                    // ---------- TEMPS QUI PASSE ----------
                     clock.advanceSeconds(duration);
                     sleepSim(duration);
 
-                    // ---------- STEP OK ----------
-                    dao.insertEvent(
+                    // =========================
+                    // STEP OK
+                    // =========================
+                    persistEvent(
                             clock.now(),
-                            partId,
+                            part,
                             machine,
+                            step,
                             "OK",
                             "OK",
                             "STEP_OK",
                             cycle,
-                            step.id(),
-                            step.name(),
                             duration,
-                            Map.of()
+                            Map.of(),
+                            wo
                     );
-
-                    System.out.println("insert event " +step.name());
                 }
             }
-
-            // =========================
-            // CYCLE END
-            // =========================
-            dao.insertEvent(
-                    clock.now(),
-                    partId,
-                    "SYSTEM",
-                    "INFO",
-                    "SIM",
-                    "CYCLE_END",
-                    cycle,
-                    "S6",
-                    "CYCLE",
-                    null,
-                    Map.of()
-            );
 
             cycle++;
         }
@@ -246,10 +240,50 @@ public class PlcRealtimeSimulator {
     // UTILS
     // =========================
 
+    // =========================
+    // PERSIST EVENT
+    // =========================
+    private void persistEvent(
+            OffsetDateTime ts,
+            Part part,
+            Machine machine,
+            ProductionStep step,
+            String level,
+            String code,
+            String message,
+            Integer cycle,
+            Double duration,
+            Map<String, Object> payload,
+            Workorder wo
+    ) {
+        PlcEvent e = new PlcEvent();
+        e.setTs(ts);
+        e.setPart(part);
+        e.setMachine(machine);
+        e.setProductionStep(step);
+        e.setLevel(level);
+        e.setCode(code);
+        e.setMessage(message);
+        e.setCycle(cycle);
+        e.setDuration(duration);
+        e.setPayload(objectMapper.valueToTree(payload));
+        e.setWorkorder(wo);
+
+        e = plcEventRepository.save(e);
+
+        System.out.println(
+                "INSERT EVENT "
+                        + machine.getCode()
+                        + " / "
+                        + step.getStepCode()
+                        + " / "
+                        + code
+        );
+    }
+
     private void sleepSim(double seconds) {
-        double s = Math.max(seconds / Math.max(speedFactor, 1e-9), 0.0);
         try {
-            Thread.sleep((long) (s * 1000));
+            Thread.sleep((long) (seconds * 1000 / speedFactor));
         } catch (InterruptedException ignored) {
         }
     }
@@ -261,35 +295,14 @@ public class PlcRealtimeSimulator {
 
     private List<Double> splitNominal(
             double nominal,
-            List<WorkflowLoader.StepDef> steps
+            List<ProductionStep> steps
     ) {
-        double[] weights = new double[steps.size()];
-
+        double w = 1.0 / steps.size();
+        List<Double> durs = new LinkedList<>();
         for (int i = 0; i < steps.size(); i++) {
-            weights[i] = weight(steps.get(i).name());
-        }
-
-        double sum = Arrays.stream(weights).sum();
-        if (sum <= 0) sum = 1.0;
-
-        List<Double> durs = new ArrayList<>();
-        for (double w : weights) {
-            durs.add(nominal * (w / sum));
+            durs.add(nominal * w);
         }
         return durs;
     }
-
-    private double weight(String stepName) {
-        String u = stepName.toUpperCase();
-        if (u.contains("PASS") || u.contains("EXEC")) return 0.18;
-        if (u.contains("MEASURE") || u.contains("FEATURE")) return 0.12;
-        if (u.contains("COMPARE")) return 0.10;
-        if (u.contains("ACQ")) return 0.08;
-        if (u.contains("WAIT")) return 0.05;
-        if (u.contains("CHECK")) return 0.06;
-        if (u.contains("RAMP")) return 0.06;
-        if (u.contains("CLEAN") || u.contains("CHIP")) return 0.05;
-        if (u.contains("SIGNAL")) return 0.03;
-        return 0.06;
-    }
 }
+

@@ -7,11 +7,14 @@ import torch
 from llama_cpp import Llama
 
 def llm():
-    return  Llama(
+    return Llama(
     model_path=Config.MODEL_NAME,
-    n_ctx=8192,        # contexte
-    n_threads=8,       # threads CPU (≈ nombre de cœurs)
-    n_batch=512        # batch tokens (perf)
+    n_ctx=4096,
+    n_threads=8,
+    n_batch=128,
+    temperature=0.2,
+    top_p=0.8,
+    top_k=40,
 )
 
 

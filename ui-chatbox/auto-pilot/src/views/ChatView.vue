@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue"
-import { api } from '../services/api'
+import { api_ia } from '../services/api'
 
 /* CONFIG */
 
@@ -57,7 +57,7 @@ async function sendMessage() {
     : `/chat_ia/generate`
 
   try {
-    const res = await api.post(url, {
+    const res = await api_ia.post(url, {
       params: { prompt }
     })
 
@@ -103,7 +103,7 @@ function onFileChange(e: Event) {
       addLoader()
 
       try {
-        const res = await api.post(
+        const res = await api_ia.post(
           "/chat_ia/prompt/image",
           { prompt: img64 },
           { headers: { "Content-Type": "application/json" } }

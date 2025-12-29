@@ -1,2 +1,0 @@
-E-M1-001: Capteur S2 position défaillant
-E-M1-002: Variateur convoyeur surintensité

@@ -21,7 +21,7 @@ public interface ProductionStepRepository extends JpaRepository<ProductionStep, 
         where ps.machine.code = :machine
         order by ps.id asc
     """)
-    List<ProductionStep> findNominalSteps(@Param("machine") String machine);
+    List<ProductionStep> findProductionSteps(@Param("machine") String machine);
 
 
     ProductionStep findFirstByOrderByIdDesc();

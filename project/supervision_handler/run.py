@@ -5,7 +5,7 @@ from supervision_handler.app.extensions import  socketio
 
 
 app = create_app()
-init_socketio(socketio, app)
+#init_socketio(socketio, app)
 
 @socketio.on("connect")
 def on_connect():

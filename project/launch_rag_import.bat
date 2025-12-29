@@ -1,0 +1,3 @@
+
+echo LLM python IA...
+start "" powershell.exe -NoExit -ExecutionPolicy Bypass -Command "& { Set-Location -LiteralPath '%CD%'; & '..\torch_env\Scripts\Activate.ps1'; python -m ia.faiss.rag_handler }"

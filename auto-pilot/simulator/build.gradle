@@ -23,10 +23,13 @@ repositories {
     mavenCentral()
 }
 
+jar {
+    enabled = false
+}
+
 dependencies {
 
-    implementation "supervision.industrial.auto_pilot:dependancy_bundle:1.0.0"
-
+    implementation project(":dependancy_bundle")
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
 
     implementation 'com.vladmihalcea:hibernate-types-60:2.21.1'
@@ -40,7 +43,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-hibernate6:2.19.1'
-    // la 5 pose probleme lors des jointures complexe
+
+    compileOnly "org.projectlombok:lombok:1.18.32"
+    annotationProcessor "org.projectlombok:lombok:1.18.32"
 }
 
 

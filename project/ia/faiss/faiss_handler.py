@@ -5,6 +5,11 @@ import faiss
 from config import Config
 from ia.history_handler import filter_relevant_history
 
+from rank_bm25 import BM25Okapi
+import re
+import numpy as np
+from sklearn.preprocessing import normalize as sk_normalize
+
 # 🔹 Paramètres
 INDEX_FILE = os.path.join(Config.INDEX_FAISS, "faiss_index.idx")
 META_FILE = os.path.join(Config.INDEX_FAISS, "faiss_metadata.pkl")
@@ -301,14 +306,9 @@ def ultra_reranker_scores(sims, eps=1e-9):
 # ----------------- Retrieval -----------------
 
 
-from rank_bm25 import BM25Okapi
-import re
-import numpy as np
-from sklearn.preprocessing import normalize as sk_normalize
-
-def retrieve(user_ip: str, query: str, top_k: int = Config.nb_chunks_to_use, query_weight: float = 1):
+def retrieve(user_ip: str, query: str, top_k: int = Config.nb_chunks_to_use, query_weight: float = 1, workflow = False):
     print("--- FAISS →  filtrage fin with BM25 rerank ---")
-    chunks, metadata, embedder, index = load_faiss_index(False)
+    chunks, metadata, embedder, index = load_faiss_index(workflow)
     if not embedder or not chunks or not index:
         return []
 
@@ -348,11 +348,13 @@ def retrieve(user_ip: str, query: str, top_k: int = Config.nb_chunks_to_use, que
     combined_scores = 0.7 * faiss_scores + 0.3 * bm25_scores
 
     # ---------------- Construction des résultats
+    seuil_min = Config.RAG_MIN_SCORE
+    if (workflow) : 
+        seuil_min = Config.RAG_MIN_SCORE_WORKFLOW
     
     results = []
     for score, chunk, meta in zip(combined_scores, candidate_chunks, candidate_metadata):
-        print(f"[RESULT] {meta.get('source','-')} score_combined: {score:.6f}")
-        if score >= Config.RAG_MIN_SCORE:
+        if score >= seuil_min:
             results.append({
                 "text": chunk,
                 "metadata": meta,
@@ -361,4 +363,5 @@ def retrieve(user_ip: str, query: str, top_k: int = Config.nb_chunks_to_use, que
             print(f"[ADD] {meta.get('source','-')} score_combined: {score:.6f}")
 
     results = sorted(results, key=lambda x: x["score"], reverse=True)
+    print("RAG RESULT size  : ", len(results))
     return results

@@ -1,10 +1,18 @@
 package dependancy_bundle.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.OffsetDateTime;
 import java.util.List;
 
+
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@Getter
+@Setter
 @Entity
 @Table(
         name = "machine",
@@ -57,6 +65,7 @@ public class Machine {
     @Column(name = "nominal_duration_s", nullable = false)
     private Integer nominalDurationS;
 
+
     // =========================
     // Relations
     // =========================
@@ -68,12 +77,10 @@ public class Machine {
      * - non propriétaire
      * - pas de cascade
      */
-    @OneToMany(fetch = FetchType.LAZY)
+    @OneToMany(fetch = FetchType.EAGER)
     @JoinColumn(
-            name = "machine_id",        // production_step.machine_id
-            referencedColumnName = "id",
-            insertable = false,
-            updatable = false
+            name = "machine_id",        // ✅ FK réelle
+            referencedColumnName = "id"
     )
     private List<ProductionStep> productionSteps;
 
@@ -91,93 +98,5 @@ public class Machine {
         if (createdAt == null) {
             createdAt = OffsetDateTime.now();
         }
-    }
-
-    // =========================
-    // Getters / Setters
-    // =========================
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getCode() {
-        return code;
-    }
-
-    public void setCode(String code) {
-        this.code = code;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public String getIpAddress() {
-        return ipAddress;
-    }
-
-    public void setIpAddress(String ipAddress) {
-        this.ipAddress = ipAddress;
-    }
-
-    public String getPlcProtocol() {
-        return plcProtocol;
-    }
-
-    public void setPlcProtocol(String plcProtocol) {
-        this.plcProtocol = plcProtocol;
-    }
-
-    public String getOpcuaEndpoint() {
-        return opcuaEndpoint;
-    }
-
-    public void setOpcuaEndpoint(String opcuaEndpoint) {
-        this.opcuaEndpoint = opcuaEndpoint;
-    }
-
-    public Integer getLineId() {
-        return lineId;
-    }
-
-    public void setLineId(Integer lineId) {
-        this.lineId = lineId;
-    }
-
-    public Integer getOrderIndex() {
-        return orderIndex;
-    }
-
-    public void setOrderIndex(Integer orderIndex) {
-        this.orderIndex = orderIndex;
-    }
-
-    public Integer getNominalDurationS() {
-        return nominalDurationS;
-    }
-
-    public void setNominalDurationS(Integer nominalDurationS) {
-        this.nominalDurationS = nominalDurationS;
-    }
-
-    public List<ProductionStep> getProductionSteps() {
-        return productionSteps;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
     }
 }

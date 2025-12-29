@@ -130,7 +130,8 @@ def llm_anomalie_analyse(anomalie_obj:PlcAnomaly):
     # 5️⃣ Appel LLM
     # --------------------------------------------------
     llm_answer = eval_prompt_anomaly_gguf(
-        prompt=prompt,
+        "",
+        prompt,
         model=model,
         anomalie=anomalie
     )

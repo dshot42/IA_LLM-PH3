@@ -1,14 +1,16 @@
-package supervision.industrial.auto_pilot.db;
+package supervision.industrial.auto_pilot.api.db;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Autowired;
 import dependancy_bundle.model.Line;
 import dependancy_bundle.model.Machine;
 import dependancy_bundle.model.ProductionStep;
+import dependancy_bundle.model.RunnerConstante;
 import dependancy_bundle.repository.LineRepository;
 import dependancy_bundle.repository.MachineRepository;
 import dependancy_bundle.repository.ProductionStepRepository;
+import dependancy_bundle.repository.RunnerConstanteRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,15 +28,13 @@ public class InitDb {
     @Autowired
     private InitScenario initScenario;
 
-    // =========================
-    // BOOTSTRAP RUNNER
-    // =========================
     @Bean
     CommandLineRunner initWorkflow(
             ObjectMapper mapper,
             LineRepository lineRepo,
             MachineRepository machineRepo,
-            ProductionStepRepository stepRepo
+            ProductionStepRepository stepRepo,
+            RunnerConstanteRepository runnerConstanteRepository
     ) {
         return args -> {
             InputStream is = InitDb.class
@@ -46,7 +46,7 @@ public class InitDb {
 
             WorkflowRoot wf = mapper.readValue(is, WorkflowRoot.class);
 
-            initDatabase(wf, lineRepo, machineRepo, stepRepo);
+            initDatabase(wf, lineRepo, machineRepo, stepRepo, runnerConstanteRepository);
             System.out.println("✅ Workflow industriel initialized");
         };
     }
@@ -59,15 +59,24 @@ public class InitDb {
             WorkflowRoot wf,
             LineRepository lineRepo,
             MachineRepository machineRepo,
-            ProductionStepRepository stepRepo
+            ProductionStepRepository stepRepo,
+            RunnerConstanteRepository runnerConstanteRepository
     ) {
+
+        if (runnerConstanteRepository.findAll().stream().findFirst().isEmpty()) {
+            RunnerConstante rc = new RunnerConstante();
+            rc.setLastCurrentEvent(0L);
+            rc.setLastAnomalyAnalise(0L);
+            runnerConstanteRepository.save(rc);
+        }
+
         // ---------- LINE ----------
         Optional<Line> l = lineRepo
                 .findByCode("LINE_MAIN");
 
         if (l.isPresent()) {
             System.out.println("Line already initialized ! ");
-            return ;
+            return;
         }
 
         // create Line
@@ -118,7 +127,7 @@ public class InitDb {
                 }
             }
         }
-        initScenario.generateNominalScenario ();
+        initScenario.generateNominalScenario();
     }
 
     // =========================
@@ -134,7 +143,8 @@ public class InitDb {
 
             @JsonProperty("machines")
             Map<String, MachineDTO> machines
-    ) {}
+    ) {
+    }
 
 
     public record LigneIndustrielle(

@@ -1,5 +1,6 @@
 package dependancy_bundle.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.vladmihalcea.hibernate.type.json.JsonType;
 import jakarta.persistence.*;
@@ -12,6 +13,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 
 @Getter
 @Setter
@@ -37,7 +39,7 @@ public class ProductionScenario {
             mappedBy = "productionScenario",
             cascade = CascadeType.ALL,
             orphanRemoval = true,
-            fetch = FetchType.LAZY
+            fetch = FetchType.EAGER
     )
     private List<ProductionScenarioStep> productionScenarioSteps = new ArrayList<>();
 }

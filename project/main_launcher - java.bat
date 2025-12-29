@@ -1,0 +1,16 @@
+
+
+echo Launching UI...
+start "UI" cmd /k "cd ..\ui-chatbox\auto-pilot && npm run dev"
+
+echo LLM python IA...
+start "" powershell.exe -NoExit -ExecutionPolicy Bypass -Command "& { Set-Location -LiteralPath '%CD%'; & '..\torch_env\Scripts\Activate.ps1'; python -m supervision_handler.run }"
+
+echo Waiting 60 seconds before launching SUPERVISION...
+timeout /t 60 /nobreak >nul
+
+echo Launching SUPERVISION...
+start "SUPERVISION" cmd /k "cd ..\auto-pilot\supervision && call launcher.bat"
+
+echo Launching SIMULATOR...
+start "SIMULATOR" cmd /k "cd ..\auto-pilot\simulator && call launcher.bat"

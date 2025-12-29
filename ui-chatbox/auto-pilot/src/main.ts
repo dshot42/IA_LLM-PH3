@@ -7,6 +7,8 @@ import LoginView from './views/LoginView.vue'
 import DashboardView from './views/DashboardView.vue'
 import PartView from './views/PartView.vue'
 import AllPartView from './views/AllPartView.vue'
+import AllWorkflowView from './views/AllWorkflowView.vue'
+
 import { auth } from './services/auth'
 import { initSocket } from "./services/socket"
 import ChatView from './views/ChatView.vue'
@@ -22,7 +24,8 @@ const router = createRouter({
     { path: '/parts', component: AllPartView, meta: { requiresAuth: true } },
     { path: '/anomalie', component: AnomaliesListView, meta: { requiresAuth: true } },
     { path: '/anomalieDetails/:id', component: AnomalyDetailView, meta: { requiresAuth: true } },
-    { path: '/chatIA', component: ChatView, meta: { requiresAuth: true } }
+    { path: '/chatIA', component: ChatView, meta: { requiresAuth: true } },
+    { path: '/workflows', component: AllWorkflowView, meta: { requiresAuth: true } }
   ]
 })
 

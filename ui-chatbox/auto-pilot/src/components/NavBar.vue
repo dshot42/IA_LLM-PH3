@@ -39,6 +39,12 @@ import {
           Machine Report
         </RouterLink>
       </li>
+         <li>
+        <RouterLink to="/workflows" active-class="active">
+          <BuildingOffice2Icon class="icon" />
+          workflow
+        </RouterLink>
+      </li>
         <li>
         <RouterLink to="/chatIA" active-class="active">
           <AcademicCapIcon class="icon" />
@@ -48,8 +54,6 @@ import {
     </ul>
   </nav>
 </template>
-
-
 
 <style scoped>
 .navbar {

@@ -11,6 +11,7 @@ from ia.generate_repport import repportLLM
 from config import Config
 
 from supervision_handler.app.factory import socketio
+from ia.faiss.faiss_handler import retrieve
 
 llm_executor = ThreadPoolExecutor(max_workers=1)
 
@@ -293,27 +294,55 @@ FIN_RAPPORT
 
 
 
+def eval_prompt_anomaly_gguf(system_prompt: str,user_prompt:str, model, anomalie: dict):
+    
+    query = (
+    f"Machine {anomalie['machine']['code']} "
+    f"step {anomalie.get('step_code','')} "
+    f"anomalie {anomalie.get('rule','')} "
+    f"overrun {anomalie.get('duration_overrun_s','')} "
+    f"dephasage workflow"
+)
+    
+    retrieved = retrieve(user_ip="none", query = query, workeflow = True)
 
-def eval_prompt_anomaly_gguf(prompt: str, model, anomalie: dict):
+    if  retrieved:
+        system_prompt += (
+            "\n\nVoici la documentation machine disponible. "
+            "Analyse les causes possibles ainsi que les solutions techniques "
+            "compatibles avec l'incident survenu.\n\n"
+            + "\n\n".join([
+                f"Texte: {r['text']}...\n"
+                f"Chemin: {r['metadata'].get('path','inconnu')}\n"
+                f"Source: {r['metadata'].get('source','inconnu')}\n"
+                f"Page: {r['metadata'].get('page','?')}\n"
+                f"Score: {round(r.get('score', 0), 3)}"
+                for r in retrieved
+            ])
+        )
 
+    
     output = model.create_chat_completion(
         messages=[
             {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
                 "role": "user",
-                "content": prompt
+                "content": user_prompt
             }
         ],
-        temperature=0.0,
-        max_tokens=700,
-        repeat_penalty=1.10,
-        stop=["FIN_RAPPORT"]
+        temperature=0.7,
+        max_tokens=1200,
+        repeat_penalty=1.10
     )
 
     # ✅ BON ACCÈS AU TEXTE
     result = output["choices"][0]["message"]["content"].strip()
 
     # 🔒 fallback intelligent
-    if not result or len(result) < 50:
+    if not result :
         result = (
             "Analyse non concluante en raison de données insuffisantes "
             "ou incohérentes pour caractériser un écart process mesurable. "
@@ -321,11 +350,9 @@ def eval_prompt_anomaly_gguf(prompt: str, model, anomalie: dict):
         )
 
     socketio.emit("anomalie", {"status": "completed"}, namespace="/")
-    repportLLM(result, anomalie, prompt)
-
-    return result
-
-
+    
+    print(result)
+    return repportLLM(result, anomalie, user_prompt)
 
 
 

@@ -1,5 +1,6 @@
 package dependancy_bundle.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.vladmihalcea.hibernate.type.json.JsonType;
 import jakarta.persistence.*;
@@ -9,18 +10,14 @@ import org.hibernate.annotations.Type;
 
 import java.time.OffsetDateTime;
 
+
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+
 @Getter
 @Setter
 @Entity
 @Table(
-        name = "plc_anomalies",
-        indexes = {
-                @Index(name = "idx_plc_anomaly_machine", columnList = "machine"),
-                @Index(name = "idx_plc_anomaly_cycle", columnList = "cycle"),
-                @Index(name = "idx_plc_anomaly_part", columnList = "part_id"),
-                @Index(name = "idx_plc_anomaly_status", columnList = "status"),
-                @Index(name = "idx_plc_anomaly_created_at", columnList = "created_at")
-        }
+        name = "plc_anomalies"
 )
 public class PlcAnomaly {
 
@@ -32,34 +29,18 @@ public class PlcAnomaly {
     private Long id;
 
 
-    /**
-     * Clé métier – écriture directe (PLC / Python / batch)
-     */
-    @Column(name = "part_id")
-    private String partId;
-
-    /**
-     * Relation Part (lecture uniquement)
-     */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(
-            name = "part_id",
-            referencedColumnName = "external_part_id",
-            insertable = false,
-            updatable = false
-    )
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "part_id", referencedColumnName = "id")
     private Part part;
 
     /**
      * Événement PLC source de l’anomalie
      * (souvent STEP_OK / ERROR / CYCLE_END)
      */
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(
             name = "event_id",
-            referencedColumnName = "id",
-            insertable = false,
-            updatable = false
+            referencedColumnName = "id"
     )
     private PlcEvent plcEvent;
 
@@ -69,14 +50,26 @@ public class PlcAnomaly {
     @Column(name = "cycle", nullable = false)
     private Integer cycle;
 
-    @Column(name = "machine", nullable = false)
-    private String machine;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(
+            name = "machine_id",
+            referencedColumnName = "id"
+    )
+    private Machine machine;
 
-    @Column(name = "step_id")
-    private String stepId;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(
+            name = "production_step_id",
+            referencedColumnName = "id"
+    )
+    private ProductionStep productionStep;
 
-    @Column(name = "step_name")
-    private String stepName;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(
+            name = "workorder_id",
+            referencedColumnName = "id"
+    )
+    private Workorder workorder;
 
     // =========================
     // Detection

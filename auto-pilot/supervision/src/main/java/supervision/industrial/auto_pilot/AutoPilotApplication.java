@@ -3,12 +3,11 @@ package supervision.industrial.auto_pilot;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
-import org.springframework.scheduling.annotation.EnableScheduling;
 
 
-@EnableScheduling
 @SpringBootApplication
 @ComponentScan({
         "supervision.industrial.auto_pilot",
@@ -22,8 +21,23 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         "supervision.industrial.auto_pilot.model",
         "dependancy_bundle.model"
 })
+
+
 public class AutoPilotApplication {
-	public static void main(String[] args) {
-		SpringApplication.run(AutoPilotApplication.class, args);
-	}
+    public static void main(String[] args) {
+        ConfigurableApplicationContext ctx =
+                SpringApplication.run(AutoPilotApplication.class, args);
+
+        RunTimeController runtime =
+                ctx.getBean(RunTimeController.class);
+
+        if (MainConfig.runMode.equals("REALTIME"))
+            runtime.startDetectorRealTime(); // thread infini => en prod
+        else if (MainConfig.runMode.equals("SIMULATOR")) {
+            runtime.startCheckAnomaly(); // test sur donnée anomaly existante
+            runtime.startTRSAnalise();
+        }
+
+    }
+
 }

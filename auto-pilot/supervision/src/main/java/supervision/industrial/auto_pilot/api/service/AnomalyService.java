@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.service;
+package supervision.industrial.auto_pilot.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dependancy_bundle.model.PlcAnomaly;
@@ -12,12 +12,12 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-public class AnomalyHandler {
+public class AnomalyService {
 
 
     public final PlcAnomalyRepository anomalyRepo;
 
-    public AnomalyHandler(PlcAnomalyRepository anomalyRepo) {
+    public AnomalyService(PlcAnomalyRepository anomalyRepo) {
         this.anomalyRepo = anomalyRepo;
     }
 

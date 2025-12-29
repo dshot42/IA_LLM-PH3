@@ -1,0 +1,181 @@
+{
+  "ligne_industrielle": {
+    "nom": "Ligne 5 machines - Usinage complet",
+    "cycle_nominal_s": 90
+  },
+  "workflow_global": {
+    "ordre_machines": [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M5"
+    ],
+    "durees_nominales_s": {
+      "M1": 8,
+      "M2": 28,
+      "M3": 18,
+      "M4": 18,
+      "M5": 12,
+      "buffers": 6
+    }
+  },
+  "grafcet": {
+    "steps": [
+      { "id": "S0", "description": "Initialisation / Reset" },
+      { "id": "S1", "machine": "M1", "description": "Chargement & Préparation" },
+      { "id": "S2", "machine": "M2", "description": "Usinage ébauche" },
+      { "id": "S3", "machine": "M3", "description": "Usinage finition" },
+      { "id": "S4", "machine": "M4", "description": "Perçage & taraudage" },
+      { "id": "S5", "machine": "M5", "description": "Contrôle & déchargement" },
+      { "id": "S6", "description": "Fin de cycle / boucle" }
+    ],
+    "transitions": [
+      { "from": "S0", "to": "S1", "condition": "SAFETY_OK && START_CMD" },
+      { "from": "S1", "to": "S2", "condition": "S-M1-005 (M1_READY_OK)" },
+      { "from": "S2", "to": "S3", "condition": "S-M2-004 (M2_DONE_OK)" },
+      { "from": "S3", "to": "S4", "condition": "S-M3-004 (M3_DONE_OK)" },
+      { "from": "S4", "to": "S5", "condition": "S-M4-003 (M4_DONE_OK)" },
+      { "from": "S5", "to": "S6", "condition": "S-M5-004 (UNLOAD_OK)" },
+      { "from": "S6", "to": "S1", "condition": "NEXT_CYCLE_REQUIRED" },
+      { "from": "*", "to": "S_ERR", "condition": "ANY E-Mx-*** CRITIQUE" }
+    ]
+  },
+  "scenario_nominal": {
+    "sequence": [
+      { "time_s": "0-8", "start_at": 0, "end_at": 8, "machine": "M1", "action": "Chargement, clamp, ID, alignement" },
+      { "time_s": "8-36", "start_at": 8, "end_at": 36, "machine": "M2", "action": "Passes d’ébauche rough" },
+      { "time_s": "36-54", "start_at": 36, "end_at": 54, "machine": "M3", "action": "Usinage finition + contrôle surface" },
+      { "time_s": "54-72", "start_at": 54, "end_at": 72, "machine": "M4", "action": "Perçage + taraudage" },
+      { "time_s": "72-90", "start_at": 72, "end_at": 90, "machine": "M5", "action": "Vision + mesure + déchargement" }
+    ]
+  },
+  "communication": {
+    "PLC": {
+      "protocole": "Profinet IRT",
+      "signaux": {
+        "M1_READY_FOR_M2": "bool",
+        "M2_DONE": "bool",
+        "M3_DONE": "bool",
+        "M4_DONE": "bool",
+        "M5_OK": "bool",
+        "M5_NOK": "bool"
+      }
+    },
+    "OPC_UA": {
+      "exemples_tags": [
+        "ns=2;s=M2/Process/LastCycleTimeMs",
+        "ns=2;s=M3/Surface/Roughness",
+        "ns=2;s=M4/Torque/Peak",
+        "ns=2;s=M5/Inspection/DimResult"
+      ]
+    }
+  },
+  "machines": {
+    "M1": {
+      "nom": "M1 - Chargement & Préparation",
+      "ip": "192.168.10.11",
+      "communication": { "PLC": "Profinet", "OPC_UA": "opc.tcp://M1-loader:4840" },
+      "description": "Module d’alimentation avec convoyeur, alignement et serrage.",
+      "fonctionnement": "Amène la pièce, la détecte, l’aligne, la serre et signale M1_READY_FOR_M2.",
+      "steps": [
+        { "id": "M1.01", "name": "WAIT_ENTRY", "description": "Attente d’une pièce à l’entrée.", "duration_s": 0.5 },
+        { "id": "M1.02", "name": "CONVEY_IN", "description": "Convoyage de la pièce en zone de travail.", "duration_s": 1.2 },
+        { "id": "M1.03", "name": "DETECT_PIECE", "description": "Capteur confirme la présence pièce.", "duration_s": 0.4 },
+        { "id": "M1.04", "name": "SLOW_ALIGN", "description": "Alignement longitudinal fin.", "duration_s": 1.0 },
+        { "id": "M1.05", "name": "SIDE_ALIGNMENT", "description": "Alignement latéral.", "duration_s": 0.8 },
+        { "id": "M1.06", "name": "CLAMP_CLOSE", "description": "Commande serrage étau/pince.", "duration_s": 0.9 },
+        { "id": "M1.07", "name": "CLAMP_VERIFY", "description": "Contrôle pression / fin de course clamp.", "duration_s": 0.4 },
+        { "id": "M1.08", "name": "ID_READ", "description": "Lecture code Datamatrix/RFID.", "duration_s": 0.5 },
+        { "id": "M1.09", "name": "POSITION_CHECK", "description": "Vérification position X/Y/Z.", "duration_s": 1.1 },
+        { "id": "M1.10", "name": "READY_SIGNAL", "description": "Émission signal M1_READY_FOR_M2.", "duration_s": 1.2 }
+      ]
+    },
+
+    "M2": {
+      "nom": "M2 - Usinage Ébauche",
+      "ip": "192.168.10.12",
+      "communication": { "PLC": "Profinet", "OPC_UA": "opc.tcp://M2-rough:4840" },
+      "description": "Centre d’usinage pour l’ébauche de la pièce.",
+      "fonctionnement": "Réalise les passes rough, surveille broche, vibrations et état outil.",
+      "steps": [
+        { "id": "M2.01", "name": "WAIT_M1_READY", "description": "Attente signal M1_READY_FOR_M2.", "duration_s": 0.5 },
+        { "id": "M2.02", "name": "FIXTURE_LOCK", "description": "Verrouillage pièce sur la table ou le montage.", "duration_s": 1.2 },
+        { "id": "M2.03", "name": "TOOL_CHECK", "description": "Contrôle outil présent/bon numéro.", "duration_s": 0.8 },
+        { "id": "M2.04", "name": "SPINDLE_RAMP_UP", "description": "Montée en vitesse broche ébauche.", "duration_s": 1.5 },
+        { "id": "M2.05", "name": "COOLANT_ON", "description": "Ouverture arrosage.", "duration_s": 0.5 },
+        { "id": "M2.06", "name": "APPROACH_POS", "description": "Approche rapide de la position d’usinage.", "duration_s": 1.0 },
+        { "id": "M2.07", "name": "ROUGH_PASS_1", "description": "Première passe d’ébauche.", "duration_s": 7.5 },
+        { "id": "M2.08", "name": "ROUGH_PASS_2", "description": "Deuxième passe d’ébauche.", "duration_s": 7.0 },
+        { "id": "M2.09", "name": "TOOLWEAR_CHECK", "description": "Contrôle usure via charge/vibration.", "duration_s": 1.2 },
+        { "id": "M2.10", "name": "RETURN_SAFE_POS", "description": "Retrait vers position sûre.", "duration_s": 1.5 },
+        { "id": "M2.11", "name": "SPINDLE_STOP", "description": "Arrêt broche.", "duration_s": 0.8 },
+        { "id": "M2.12", "name": "CHIP_CLEAN", "description": "Soufflage/évacuation copeaux.", "duration_s": 2.5 },
+        { "id": "M2.13", "name": "DONE_SIGNAL", "description": "Émission signal M2_DONE.", "duration_s": 2.0 }
+      ]
+    },
+
+    "M3": {
+      "nom": "M3 - Usinage Finition",
+      "ip": "192.168.10.13",
+      "communication": { "PLC": "Profinet", "OPC_UA": "opc.tcp://M3-finish:4840" },
+      "description": "Centre d’usinage finition pour tolérances serrées.",
+      "fonctionnement": "Effectue les passes de finition, contrôle l’état de surface et peut palper la géométrie.",
+      "steps": [
+        { "id": "M3.01", "name": "WAIT_M2_DONE", "description": "Attente signal M2_DONE.", "duration_s": 0.4 },
+        { "id": "M3.02", "name": "FINE_FIXTURE_CHECK", "description": "Vérification montage précision.", "duration_s": 0.8 },
+        { "id": "M3.03", "name": "TOOL_VERIFY_FINISH", "description": "Contrôle outil de finition.", "duration_s": 0.7 },
+        { "id": "M3.04", "name": "SPINDLE_FINE_RAMP", "description": "Montée à la vitesse de finition.", "duration_s": 1.2 },
+        { "id": "M3.05", "name": "APPROACH_FINISH", "description": "Approche sur la zone de finition.", "duration_s": 0.9 },
+        { "id": "M3.06", "name": "FINISH_PASS_1", "description": "Première passe de finition.", "duration_s": 4.0 },
+        { "id": "M3.07", "name": "FINISH_PASS_2", "description": "Deuxième passe de finition.", "duration_s": 4.2 },
+        { "id": "M3.08", "name": "SURFACE_SENSOR_CHECK", "description": "Contrôle état de surface (Ra).", "duration_s": 1.8 },
+        { "id": "M3.09", "name": "OPTIONAL_PROBE", "description": "Palpage dimensionnel si activé.", "duration_s": 1.5 },
+        { "id": "M3.10", "name": "CLEAN_AIR", "description": "Soufflage finale.", "duration_s": 1.0 },
+        { "id": "M3.11", "name": "DONE_SIGNAL", "description": "Émission signal M3_DONE.", "duration_s": 1.5 }
+      ]
+    },
+
+    "M4": {
+      "nom": "M4 - Perçage & Taraudage",
+      "ip": "192.168.10.14",
+      "communication": { "PLC": "Profinet", "OPC_UA": "opc.tcp://M4-drill:4840" },
+      "description": "Module multi-outils pour perçage et taraudage.",
+      "fonctionnement": "Réalise perçage et taraudage avec suivi de couple et nettoyage des trous.",
+      "steps": [
+        { "id": "M4.01", "name": "WAIT_M3_DONE", "description": "Attente signal M3_DONE.", "duration_s": 0.4 },
+        { "id": "M4.02", "name": "TOOL_SELECT_DRILL", "description": "Sélection du foret.", "duration_s": 1.0 },
+        { "id": "M4.03", "name": "DRILL_APPROACH", "description": "Approche point de perçage.", "duration_s": 0.8 },
+        { "id": "M4.04", "name": "DRILL_EXEC", "description": "Cycle de perçage.", "duration_s": 3.8 },
+        { "id": "M4.05", "name": "DRILL_RETRACT", "description": "Retrait foret.", "duration_s": 0.8 },
+        { "id": "M4.06", "name": "TOOL_SELECT_TAP", "description": "Sélection taraud.", "duration_s": 1.0 },
+        { "id": "M4.07", "name": "TAP_ENGAGE", "description": "Engagement taraud dans le trou.", "duration_s": 2.8 },
+        { "id": "M4.08", "name": "TAP_MONITOR_TORQUE", "description": "Surveillance couple taraudage.", "duration_s": 2.2 },
+        { "id": "M4.09", "name": "TAP_RETRACT", "description": "Sortie du taraud.", "duration_s": 1.0 },
+        { "id": "M4.10", "name": "HOLE_CLEAN", "description": "Soufflage/ nettoyage trou.", "duration_s": 1.5 },
+        { "id": "M4.11", "name": "DONE_SIGNAL", "description": "Émission signal M4_DONE.", "duration_s": 2.7 }
+      ]
+    },
+
+    "M5": {
+      "nom": "M5 - Contrôle & Déchargement",
+      "ip": "192.168.10.15",
+      "communication": { "PLC": "Profinet", "OPC_UA": "opc.tcp://M5-inspect:4840" },
+      "description": "Module de vision, mesure, décision qualité et déchargement.",
+      "fonctionnement": "Contrôle la pièce (vision + dimension) puis décharge vers bac PASS/REJECT avec log résultat.",
+      "steps": [
+        { "id": "M5.01", "name": "WAIT_M4_DONE", "description": "Attente signal M4_DONE.", "duration_s": 0.3 },
+        { "id": "M5.02", "name": "RECEIVE_PART", "description": "Réception et positionnement pièce.", "duration_s": 0.8 },
+        { "id": "M5.03", "name": "VISION_TRIGGER", "description": "Déclenchement caméra.", "duration_s": 0.4 },
+        { "id": "M5.04", "name": "ACQ_2D", "description": "Acquisition images 2D.", "duration_s": 1.5 },
+        { "id": "M5.05", "name": "ACQ_3D", "description": "Scan 3D si disponible.", "duration_s": 1.2 },
+        { "id": "M5.06", "name": "FEATURE_MEASURE", "description": "Calcul cotes et caractéristiques.", "duration_s": 2.0 },
+        { "id": "M5.07", "name": "COMPARE_SPECS", "description": "Comparaison aux tolérances définies.", "duration_s": 1.3 },
+        { "id": "M5.08", "name": "LIGHT_DEBURR", "description": "Ébavurage léger sur arêtes.", "duration_s": 1.0 },
+        { "id": "M5.09", "name": "UNCLAMP", "description": "Déverrouillage pièce.", "duration_s": 0.6 },
+        { "id": "M5.10", "name": "UNLOAD_TO_BIN", "description": "Déchargement en bac PASS ou REJECT.", "duration_s": 0.9 },
+        { "id": "M5.11", "name": "LOG_RESULT", "description": "Enregistrement résultat qualité et code retour.", "duration_s": 1.0 }
+      ]
+    }
+  }
+}

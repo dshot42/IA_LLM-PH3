@@ -22,7 +22,7 @@ function logout() {
     </div>
 
     <div class="actions">
-      <span v-if="auth.isAuthenticated()" class="pill">JWT</span>
+      <span v-if="auth.isAuthenticated()" class="pill">Connected</span>
       <button v-if="auth.isAuthenticated()" class="btn" @click="logout">
         Logout
       </button>

@@ -1,10 +1,12 @@
 package simulator;
 
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Repository
@@ -19,35 +21,44 @@ public class PlcEventDao {
     }
 
     private static final String INSERT_SQL = """
-        INSERT INTO plc_events
-        (ts, part_id, machine, level, code, message, cycle, step_id, step_name, duration, payload)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
-        """;
+            INSERT INTO plc_events
+            (ts, part_id, workorder_id, machine, level, code, message, cycle, step_id, step_name, duration, payload)
+            VALUES (?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+            """;
 
     public void insertEvent(
             OffsetDateTime ts,
-            String partId,
+            Long partId,
             String machine,
             String level,
             String code,
             String message,
-            int cycle,
-            String stepId,
-            String stepName,
-            Double duration,
-            Object payloadObj
+            Integer cycle,
+            Long productionStepId,
+            BigDecimal duration,
+            JsonNode payload,
+            Long workorderId
     ) {
         try {
-            String payloadJson = payloadObj == null ? null : om.writeValueAsString(payloadObj);
             jdbc.update(
                     INSERT_SQL,
-                    ts, partId, machine, level, code, message,
-                    cycle, stepId, stepName, duration, payloadJson
+                    ts,
+                    partId,
+                    getMachineId(machine),
+                    level,
+                    code,
+                    message,
+                    cycle,
+                    productionStepId,
+                    duration,
+                    payload == null ? null : payload.toString(),
+                    workorderId
             );
         } catch (Exception e) {
             throw new RuntimeException("Failed to insert plc_event", e);
         }
     }
+
 
     public void clearTables() {
         jdbc.update("DELETE FROM part");
@@ -55,12 +66,23 @@ public class PlcEventDao {
         jdbc.update("DELETE FROM plc_anomalies");
     }
 
-    public void insertPart(String externalPartId) {
+    public Long insertPart(String externalPartId) {
         System.out.println("Inserting part with id " + externalPartId);
-        jdbc.update("""
-            INSERT INTO part (external_part_id, line_id, status)
-            VALUES (?, ?, ?)
-            ON CONFLICT (external_part_id) DO NOTHING
-        """, externalPartId, 1, "IN_PROGRESS");
+        return jdbc.queryForObject("""
+                    INSERT INTO part (external_part_id, line_id, status)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT (external_part_id)
+                    DO UPDATE SET external_part_id = EXCLUDED.external_part_id
+                    RETURNING id
+                """, Long.class, externalPartId, 1, "IN_PROGRESS");
+    }
+
+    public Long getMachineId(String name) {
+        return jdbc.queryForObject(
+                "SELECT id FROM machine WHERE code = ?",
+                Long.class,
+                name
+        );
+
     }
 }

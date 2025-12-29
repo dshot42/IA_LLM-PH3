@@ -36,4 +36,11 @@ export type PartMachineCycle = {
   status: string
 }
 
+export type WorkorderListItem = {
+  id : string
+  name: string
+  status: string
+  // todo 
+}
+
 export type PartDetail = { part_id: string; machines: PartMachineCycle[]; steps: PartStep[] }

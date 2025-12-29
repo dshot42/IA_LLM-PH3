@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.dto;
+package supervision.industrial.auto_pilot.api.dto;
 
 import dependancy_bundle.model.PlcAnomaly;
 import dependancy_bundle.model.PlcEvent;

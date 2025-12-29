@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.service.detector.rules;
+package supervision.industrial.auto_pilot.workflow.detector.rules;
 
 import com.fasterxml.jackson.databind.JsonNode;
 

@@ -3,3 +3,16 @@ when part finish => PlcAnomaly anomaly = plcAnomalyDetectionService.detectAndPer
 retablir le part service du python ! ! !
 
 surment la severity a revoir
+
+
+retablir le scenario comparaison des event
+
+retablir trs front et back
+
+retablir route python
+
+gestion anomaly a ameliorer
+
+reprendre faiss rag avec gguf ? je sais pas comment le goupiller car ca merde complet niveau chunk
+
+affichage alert ( modal) apparait lors d'une anomalie avec rapport a telecharger !

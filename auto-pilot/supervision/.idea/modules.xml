@@ -4,6 +4,7 @@
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/auto-pilot.main.iml" filepath="$PROJECT_DIR$/.idea/modules/auto-pilot.main.iml" />
       <module fileurl="file://$PROJECT_DIR$/simulator/simulator.iml" filepath="$PROJECT_DIR$/simulator/simulator.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/-1680977223/supervision.industrial.auto_pilot.auto-pilot.dependancy_bundle.main.iml" filepath="$PROJECT_DIR$/.idea/modules/-1680977223/supervision.industrial.auto_pilot.auto-pilot.dependancy_bundle.main.iml" />
     </modules>
   </component>
 </project>

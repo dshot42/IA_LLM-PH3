@@ -21,9 +21,9 @@ def create_app():
     with app.app_context():
         from . import models
         from .routes import api_bp
-        from .route_chat_ia import chat_ia
+        from .route_chat_ia import ia_api
 
         app.register_blueprint(api_bp)
-        app.register_blueprint(chat_ia)
+        app.register_blueprint(ia_api)
 
     return app

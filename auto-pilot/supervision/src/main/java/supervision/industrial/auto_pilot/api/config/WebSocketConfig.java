@@ -1,6 +1,6 @@
-package supervision.industrial.auto_pilot.config;
+package supervision.industrial.auto_pilot.api.config;
 
-import supervision.industrial.auto_pilot.websocket.AnomalyWebSocketHandler;
+import supervision.industrial.auto_pilot.api.websocket.AnomalyWebSocketHandler;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;

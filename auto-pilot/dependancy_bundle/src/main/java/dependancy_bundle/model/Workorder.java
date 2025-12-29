@@ -1,17 +1,19 @@
 package dependancy_bundle.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import dependancy_bundle.model.enumeration.WorkorderStatus;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 @Getter
 @Setter
 @Entity
 @Table(
-        name = "workorder"
+    name = "workorder"
 )
 public class Workorder {
 
@@ -30,7 +32,16 @@ public class Workorder {
             name = "production_scenario_id",
             referencedColumnName = "id"
     )
-    private ProductionScenario productionScenarioStep;
+    private ProductionScenario productionScenario;
+
+
+    @JsonIgnore
+    @OneToMany(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "plc_anomalies",
+            referencedColumnName = "id"
+    )
+    private List<PlcAnomaly> anomalies;
 
 
     // =========================
@@ -65,6 +76,11 @@ public class Workorder {
     @Column(name = "finished_at")
     private OffsetDateTime finishedAt;
 
-
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            createdAt = OffsetDateTime.now();
+        }
+    }
 
 }

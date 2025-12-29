@@ -1,12 +1,12 @@
-package supervision.industrial.auto_pilot.controller;
+package supervision.industrial.auto_pilot.api.controller;
 
 import dependancy_bundle.model.PlcAnomaly;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-import supervision.industrial.auto_pilot.dto.PageResponse;
-import supervision.industrial.auto_pilot.service.AnomalyHandler;
+import supervision.industrial.auto_pilot.api.dto.PageResponse;
+import supervision.industrial.auto_pilot.api.service.AnomalyService;
 
 import java.util.List;
 
@@ -15,13 +15,13 @@ import java.util.List;
 @RequestMapping("/api")
 public class AnomalyController {
 
-    private final AnomalyHandler service;
+    private final AnomalyService service;
 
-    public AnomalyController(AnomalyHandler service) {
+    public AnomalyController(AnomalyService service) {
         this.service = service;
     }
 
-    @GetMapping("/anomalys")
+    @GetMapping("/anomalies")
     public PageResponse<Object> list(
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "page_size", defaultValue = "25") int pageSize
@@ -32,7 +32,7 @@ public class AnomalyController {
         return new PageResponse<>(items, total, page, pageSize);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/anomalies/{id}")
     public PlcAnomaly get(@PathVariable Long id) {
         return service.anomalyRepo
                 .findById(id)

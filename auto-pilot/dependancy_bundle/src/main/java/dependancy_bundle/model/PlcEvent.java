@@ -1,54 +1,45 @@
 package dependancy_bundle.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.vladmihalcea.hibernate.type.json.JsonType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.Type;
-import dependancy_bundle.model.event_listener.PlcEventEntityListener;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
+
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 
 @Getter
 @Setter
 @Entity
-@EntityListeners(PlcEventEntityListener.class)
 @Table(
-        name = "plc_events",
-        indexes = {
-                @Index(name = "idx_plc_events_ts", columnList = "ts"),
-                @Index(name = "idx_plc_events_part_ts", columnList = "part_id, ts"),
-                @Index(name = "idx_plc_events_machine_ts", columnList = "machine, ts"),
-                @Index(name = "idx_plc_events_cycle", columnList = "cycle"),
-                @Index(name = "idx_plc_events_step", columnList = "step_id"),
-                @Index(name = "idx_plc_events_level", columnList = "level")
-        }
+        name = "plc_events"
 )
 public class PlcEvent {
 
-    // =========================
-    // PK technique (obligatoire JPA)
-    // =========================
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    // =========================
-    // Colonnes DB
-    // =========================
 
     @Column(name = "ts", nullable = false, columnDefinition = "timestamptz")
     private OffsetDateTime ts;
 
     // si gestion par lot , null
-    @Column(name = "part_id", nullable = true)
-    private String partId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "part_id")
+    private Part part;
 
-    @Column(name = "machine", nullable = false)
-    private String machine;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(
+            name = "machine_id",
+            referencedColumnName = "id"
+    )
+    private Machine machine;
 
     @Column(name = "level", nullable = false)
     private String level;   // INFO / OK / ERROR
@@ -62,14 +53,15 @@ public class PlcEvent {
     @Column(name = "cycle")
     private Integer cycle;
 
-    @Column(name = "step_id")
-    private String stepId;
-
-    @Column(name = "step_name")
-    private String stepName;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(
+            name = "production_step_id",
+            referencedColumnName = "id"
+    )
+    private ProductionStep productionStep;
 
     @Column(name = "duration")
-    private BigDecimal duration;
+    private Double duration;
 
     @Type(JsonType.class)
     @Column(name = "payload", columnDefinition = "jsonb")
@@ -79,11 +71,8 @@ public class PlcEvent {
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(
             name = "workorder_id",
-            referencedColumnName = "id",
-            insertable = false,
-            updatable = false
+            referencedColumnName = "id"
     )
     private Workorder workorder;
-
 
 }

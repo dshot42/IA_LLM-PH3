@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.service.detector.predict;
+package supervision.industrial.auto_pilot.workflow.detector.predict;
 
 /**
  * EWMA sur série de comptes (ex: occurrences/jour).

@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.service.detector;
+package supervision.industrial.auto_pilot.workflow.detector;
 
 
 import dependancy_bundle.model.ProductionStep;

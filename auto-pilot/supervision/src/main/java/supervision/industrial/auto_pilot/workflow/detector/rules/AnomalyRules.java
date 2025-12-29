@@ -1,10 +1,11 @@
-package supervision.industrial.auto_pilot.service.detector.rules;
+package supervision.industrial.auto_pilot.workflow.detector.rules;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dependancy_bundle.model.PlcEvent;
 import dependancy_bundle.model.ProductionScenarioStep;
 import dependancy_bundle.model.ProductionStep;
+import supervision.industrial.auto_pilot.MainConfig;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -86,60 +87,42 @@ public final class AnomalyRules {
 
             long gapS = Duration.between(ctx.previousStepTs(), e.getTs()).getSeconds();
 
-            if (gapS < 0) {
-                ObjectNode d = M.createObjectNode();
-                d.put("previous_step_ts", ctx.previousStepTs().toString());
-                d.put("current_step_ts", e.getTs().toString());
-                d.put("gap_seconds", gapS);
-                d.put("trigger_condition", "gap_seconds < 0");
-                d.put("observed", "Intervalle négatif entre deux steps consécutifs");
-                d.put(
-                        "interpretation",
-                        "La durée calculée entre deux steps est négative, indiquant une incohérence temporelle."
-                );
 
-                hits.add(new RuleHit(
-                        "NEGATIVE_INTERVAL",
-                        "Negative interval between steps",
-                        d
-                ));
+            if (e.getProductionStep() != null) {
 
-            } else {
-                if (e.getProductionStep() != null) {
+                ProductionStep ns =
+                        ctx.nominalByStepId().get(e.getProductionStep().getId());
 
-                    ProductionStep ns =
-                            ctx.nominalByStepId().get(e.getProductionStep().getId());
+                if (ns != null && ns.getNominalDurationS() != null) {
 
-                    if (ns != null && ns.getNominalDurationS() != null) {
+                    double nominal = Math.max(1.0, ns.getNominalDurationS());
+                    double threshold = MainConfig.toleranceOverrun * nominal;
 
-                        double nominal = Math.max(1.0, ns.getNominalDurationS());
-                        double threshold = 1.1 * nominal;
+                    if (gapS > threshold) {
 
-                        if (gapS > threshold) {
+                        ObjectNode d = M.createObjectNode();
+                        d.put("previous_step_ts", ctx.previousStepTs().toString());
+                        d.put("current_step_ts", e.getTs().toString());
+                        d.put("observed_gap_seconds", gapS);
+                        d.put("nominal_step_duration_seconds", nominal);
+                        d.put("threshold_seconds", threshold);
+                        d.put(
+                                "trigger_condition",
+                                "observed_gap_seconds > 1.1 * nominal_step_duration_seconds"
+                        );
+                        d.put(
+                                "interpretation",
+                                "La durée observée entre deux steps dépasse le seuil nominal autorisé."
+                        );
 
-                            ObjectNode d = M.createObjectNode();
-                            d.put("previous_step_ts", ctx.previousStepTs().toString());
-                            d.put("current_step_ts", e.getTs().toString());
-                            d.put("observed_gap_seconds", gapS);
-                            d.put("nominal_step_duration_seconds", nominal);
-                            d.put("threshold_seconds", threshold);
-                            d.put(
-                                    "trigger_condition",
-                                    "observed_gap_seconds > 1.1 * nominal_step_duration_seconds"
-                            );
-                            d.put(
-                                    "interpretation",
-                                    "La durée observée entre deux steps dépasse le seuil nominal autorisé."
-                            );
-
-                            hits.add(new RuleHit(
-                                    "INTERVAL_OVERRUN",
-                                    "Interval exceeds nominal ratio",
-                                    d
-                            ));
-                        }
+                        hits.add(new RuleHit(
+                                "INTERVAL_OVERRUN",
+                                "Interval exceeds nominal ratio",
+                                d
+                        ));
                     }
                 }
+
             }
         }
 
@@ -193,7 +176,7 @@ public final class AnomalyRules {
                     );
 
                     hits.add(new RuleHit(
-                            "WORKFLOW_BACKWARD",
+                            "SEQUENCE_ERROR",
                             "Workflow step went backward vs nominal order",
                             d
                     ));
@@ -219,7 +202,7 @@ public final class AnomalyRules {
                     );
 
                     hits.add(new RuleHit(
-                            "WORKFLOW_SKIP",
+                            "SEQUENCE_ERROR",
                             "Workflow step(s) skipped vs nominal order",
                             d
                     ));

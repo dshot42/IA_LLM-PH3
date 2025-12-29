@@ -1,16 +1,9 @@
-package supervision.industrial.auto_pilot.websocket;
+package supervision.industrial.auto_pilot.api.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dependancy_bundle.model.Part;
 import org.springframework.stereotype.Component;
-import org.springframework.web.socket.CloseStatus;
-import org.springframework.web.socket.TextMessage;
-import org.springframework.web.socket.WebSocketSession;
-import org.springframework.web.socket.handler.TextWebSocketHandler;
-
-import java.io.IOException;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Replacement for Flask-SocketIO ws.py:
@@ -21,14 +14,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PartWebSocketUpdate extends SocketHandler {
 
 
-    public void emitPartCompleted() {
+    public void emitPartCompleted(Part p) {
         try {
             ObjectMapper mapper = new ObjectMapper();
             ObjectNode root = mapper.createObjectNode();
             root.put("event", "part");
 
             ObjectNode data = mapper.createObjectNode();
-            data.put("status", "completed");
+            data.put("part", mapper.writeValueAsString(p));
             root.set("data", data);
 
             broadcastJson(root.toString());

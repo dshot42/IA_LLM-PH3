@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.db;
+package supervision.industrial.auto_pilot.api.db;
 
 import dependancy_bundle.repository.ProductionScenarioRepository;
 import org.springframework.beans.factory.annotation.Autowired;

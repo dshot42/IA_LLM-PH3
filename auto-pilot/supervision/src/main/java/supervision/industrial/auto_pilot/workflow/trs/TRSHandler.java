@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.service.trs;
+package supervision.industrial.auto_pilot.workflow.trs;
 
 import dependancy_bundle.model.Workorder;
 import jakarta.persistence.EntityManager;

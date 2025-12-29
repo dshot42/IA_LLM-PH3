@@ -1,6 +1,7 @@
 package dependancy_bundle.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -8,6 +9,7 @@ import lombok.Setter;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 
 @Getter
 @Setter
@@ -27,18 +29,18 @@ public class ProductionStep {
     // =========================
     // Business fields
     // =========================
-    @Column(name = "step_code", nullable = false, length = 10)
+    @Column(name = "step_code", nullable = false)
     private String stepCode;      // ex: M2.07
+
+    @Column(name = "step_type", nullable = false)
+    private String stepType= "SYSTEM"; // HUMAIN      // ex: M2.07
+
 
     @Column(name = "name", nullable = false)
     private String name;          // ROUGH_PASS_1
 
     @Column(name = "description")
     private String description;
-
-    @Column(name = "duration")
-    private Long duration;
-
 
     @Column(name = "nominal_duration_s", nullable = false)
     private Double nominalDurationS;
@@ -75,8 +77,8 @@ public class ProductionStep {
         }
     }
 
-    @OneToMany(mappedBy = "productionStep", fetch = FetchType.LAZY)
     @JsonIgnore
+    @OneToMany(mappedBy = "productionStep", fetch = FetchType.LAZY)
     private List<ProductionScenarioStep> productionScenarioSteps;
 
 

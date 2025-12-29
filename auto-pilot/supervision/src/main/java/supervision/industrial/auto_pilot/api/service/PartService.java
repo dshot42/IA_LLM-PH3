@@ -1,28 +1,31 @@
-package supervision.industrial.auto_pilot.service;
+package supervision.industrial.auto_pilot.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dependancy_bundle.model.Part;
 import dependancy_bundle.model.PlcAnomaly;
 import dependancy_bundle.model.PlcEvent;
 import dependancy_bundle.repository.PartRepository;
 import dependancy_bundle.repository.PlcAnomalyRepository;
 import dependancy_bundle.repository.PlcEventRepository;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-import supervision.industrial.auto_pilot.dto.PartDetailResponse;
+import supervision.industrial.auto_pilot.api.dto.PartDetailResponse;
+import supervision.industrial.auto_pilot.api.dto.SkipPLCEvent;
 
 import java.util.List;
 import java.util.Map;
 
 @Service
-public class PartHandler {
+public class PartService {
 
 
     private final PartRepository partRepo;
     private final PlcEventRepository eventRepo;
     private final PlcAnomalyRepository anomalyRepo;
 
-    public PartHandler(PartRepository partRepo, PlcEventRepository eventRepo, PlcAnomalyRepository anomalyRepo) {
+    public PartService(PartRepository partRepo, PlcEventRepository eventRepo, PlcAnomalyRepository anomalyRepo) {
         this.partRepo = partRepo;
         this.eventRepo = eventRepo;
         this.anomalyRepo = anomalyRepo;
@@ -31,21 +34,21 @@ public class PartHandler {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @PostConstruct
+    public void configureMapper() {
+        objectMapper.addMixIn(Part.class, SkipPLCEvent.class);
+    }
+
+
     public List<Object> listParts(int page, int pageSize) {
         return partRepo
                 .findAll(PageRequest.of(page, pageSize))
                 .getContent()
                 .stream()
-                .map(part -> {
-                    Map<String, Object> map =
-                            objectMapper.convertValue(part, Map.class);
-
-                    map.remove("plcEvents");
-
-                    return (Object) map;
-                })
+                .map(part -> (Object) objectMapper.valueToTree(part))
                 .toList();
     }
+
 
 
     public long countParts() {

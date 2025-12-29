@@ -23,9 +23,12 @@ repositories {
     mavenCentral()
 }
 
+jar {
+    enabled = false
+}
 dependencies {
 
-    implementation "supervision.industrial.auto_pilot:dependancy_bundle:1.0.0"
+    implementation project(":dependancy_bundle")
 
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
 
@@ -36,7 +39,6 @@ dependencies {
     runtimeOnly 'com.h2database:h2'
     runtimeOnly 'org.postgresql:postgresql'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-hibernate6:2.19.1'

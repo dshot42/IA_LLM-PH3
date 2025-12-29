@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.config;
+package supervision.industrial.auto_pilot.api.config;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -9,7 +9,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import supervision.industrial.auto_pilot.controller.AuthController;
+import supervision.industrial.auto_pilot.api.controller.AuthController;
 
 import java.io.IOException;
 import java.util.Collections;

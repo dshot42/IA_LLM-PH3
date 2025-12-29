@@ -1,4 +1,11 @@
 package supervision.industrial.auto_pilot.api.dto;
 
-public class SkipPLCEvent {
-}
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+import java.util.List;
+
+public abstract  class SkipPLCEvent {
+
+        @JsonIgnore
+        abstract List<?> getPlcEvents();
+    }

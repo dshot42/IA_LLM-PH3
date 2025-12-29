@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.service;
+package supervision.industrial.auto_pilot.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dependancy_bundle.model.ProductionScenarioStep;
@@ -10,20 +10,20 @@ import dependancy_bundle.repository.WorkorderRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-import supervision.industrial.auto_pilot.dto.WorkorderDetailResponse;
+import supervision.industrial.auto_pilot.api.dto.WorkorderDetailResponse;
 
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
 @Service
-public class WorkorderHandler {
+public class WorkorderService {
 
     private final WorkorderRepository workorderRepository;
     private final PlcEventRepository eventRepo;
     private final PlcAnomalyRepository anomalyRepo;
 
-    public WorkorderHandler(WorkorderRepository workorderRepository, PlcEventRepository eventRepo, PlcAnomalyRepository anomalyRepo) {
+    public WorkorderService(WorkorderRepository workorderRepository, PlcEventRepository eventRepo, PlcAnomalyRepository anomalyRepo) {
         this.workorderRepository = workorderRepository;
         this.eventRepo = eventRepo;
         this.anomalyRepo = anomalyRepo;

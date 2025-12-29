@@ -113,6 +113,7 @@ deprecated==1.3.1
 exceptiongroup==1.3.1
 sniffio==1.3.1
 mpmath==1.3.0
+huggingface-hub==1.2.3
 python-dotenv==1.2.1
 hf-xet==1.2.0
 langchain==1.1.0
@@ -126,7 +127,6 @@ langchain-classic==1.0.0
 langchain-text-splitters==1.0.0
 requests-toolbelt==1.0.0
 referencing==0.37.0
-huggingface-hub==0.36.0
 rpds-py==0.29.0
 httpx==0.28.1
 zstandard==0.25.0

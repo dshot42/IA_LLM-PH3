@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.service.detector;
+package supervision.industrial.auto_pilot.workflow.detector;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -6,35 +6,35 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dependancy_bundle.model.*;
 import dependancy_bundle.model.enumeration.Severity;
-import dependancy_bundle.repository.MachineRepository;
-import dependancy_bundle.repository.PartRepository;
-import dependancy_bundle.repository.PlcAnomalyRepository;
-import dependancy_bundle.repository.PlcEventRepository;
+import dependancy_bundle.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import supervision.industrial.auto_pilot.service.detector.dto.OccurrenceStats;
-import supervision.industrial.auto_pilot.service.detector.dto.PredictiveSignals;
-import supervision.industrial.auto_pilot.service.detector.dto.StepIntervalStats;
-import supervision.industrial.auto_pilot.service.detector.predict.Burstiness;
-import supervision.industrial.auto_pilot.service.detector.predict.Ewma;
-import supervision.industrial.auto_pilot.service.detector.predict.HawkesLike;
-import supervision.industrial.auto_pilot.service.detector.rules.AnomalyRules;
-import supervision.industrial.auto_pilot.service.detector.rules.RuleContext;
-import supervision.industrial.auto_pilot.service.detector.rules.RuleHit;
-import supervision.industrial.auto_pilot.service.prompt.PromptBuilderService;
+import supervision.industrial.auto_pilot.workflow.detector.dto.OccurrenceStats;
+import supervision.industrial.auto_pilot.workflow.detector.dto.PredictiveSignals;
+import supervision.industrial.auto_pilot.workflow.detector.dto.StepIntervalStats;
+import supervision.industrial.auto_pilot.workflow.detector.predict.Burstiness;
+import supervision.industrial.auto_pilot.workflow.detector.predict.Ewma;
+import supervision.industrial.auto_pilot.workflow.detector.predict.HawkesLike;
+import supervision.industrial.auto_pilot.workflow.detector.rules.AnomalyRules;
+import supervision.industrial.auto_pilot.workflow.detector.rules.RuleContext;
+import supervision.industrial.auto_pilot.workflow.detector.rules.RuleHit;
+import supervision.industrial.auto_pilot.workflow.prompt.AnomalyPromptService;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PlcAnomalyDetectionService {
 
     @Autowired
-    private final PromptBuilderService promptBuilderService;
+    private final AnomalyPromptService anomalyPromptService;
     private static final ObjectMapper M = new ObjectMapper();
 
     private final WorkflowNominalService workflowNominalService;
@@ -44,6 +44,9 @@ public class PlcAnomalyDetectionService {
     private final PlcAnomalyRepository plcAnomalyRepository;
     private final PartRepository partRepository;
     private final MachineRepository machineRepository;
+    private final RunnerConstanteRepository runnerConstanteRepository;
+    private final ProductionStepRepository productionStepRepository;
+    private final ProductionScenarioStepRepository productionScenarioStepRepository;
 
     // =========================================================
     // NOMINAL SCENARIO (string for prompt)
@@ -53,7 +56,7 @@ public class PlcAnomalyDetectionService {
         StringBuilder sb = new StringBuilder();
 
         Machine m = a.getMachine();
-        ProductionStep ps = a.getProductionStep();
+        ProductionStep ps = productionStepRepository.findById(a.getProductionStep().getId()).orElse(null);
 
         sb.append("Machine nominale : ")
                 .append(m.getCode())
@@ -71,15 +74,13 @@ public class PlcAnomalyDetectionService {
         Workorder wo = a.getWorkorder();
         if (wo != null && wo.getProductionScenario() != null && wo.getProductionScenario().getProductionScenarioSteps() != null) {
             for (ProductionScenarioStep prodStep : wo.getProductionScenario().getProductionScenarioSteps()) {
-                ProductionStep step = prodStep.getProductionStep();
+                ProductionStep step = productionStepRepository.findById(prodStep.getProductionStep().getId()).orElse(null);
                 if (step == null) continue;
                 sb.append(i++)
                         .append(". ")
                         .append(step.getStepCode())
                         .append(" ")
                         .append(step.getName())
-                        .append(" – ")
-                        .append(step.getDescription())
                         .append(" [")
                         .append(valueOrNA(step.getNominalDurationS()))
                         .append(" s]")
@@ -92,8 +93,9 @@ public class PlcAnomalyDetectionService {
                             .stream()
                             .max(Comparator.comparing(ProductionScenarioStep::getStepOrder))
                             .orElse(null);
-
-            if (lastProductionStep != null && lastProductionStep.getProductionStep() != null) {
+            lastProductionStep = productionScenarioStepRepository.findById(lastProductionStep.getId()).get();
+            lastProductionStep.setProductionStep(productionStepRepository.findById(lastProductionStep.getProductionStep().getId()).get());
+            if (lastProductionStep.getProductionStep() != null) {
                 sb.append("\nStep terminal nominal attendu : ")
                         .append(lastProductionStep.getProductionStep().getStepCode())
                         .append(" ")
@@ -103,6 +105,7 @@ public class PlcAnomalyDetectionService {
         }
 
         return sb.toString();
+
     }
 
     private String valueOrNA(Object v) {
@@ -112,7 +115,7 @@ public class PlcAnomalyDetectionService {
     // =========================================================
     // MAIN ENTRY
     // =========================================================
-    @Transactional
+
     public void detectAndPersist(PlcEvent event) {
         if (event == null) return;
         if (event.getWorkorder() == null) return; // impossible de construire le nominal sans WO
@@ -155,7 +158,10 @@ public class PlcAnomalyDetectionService {
         );
 
         List<RuleHit> hits = AnomalyRules.evaluate(ctx);
-        if (hits.isEmpty()) return;
+        if (hits.isEmpty()) {
+            log.info("[Detector] Aucune anomaly sur cet event ! ");
+            return;
+        }
 
 
         // 4) Build anomaly entity
@@ -199,8 +205,6 @@ public class PlcAnomalyDetectionService {
         } else {
             a.setDurationOverrunS(null);
         }
-
-
         // 5) Stats d’occurrence + "écart-type" sur survenue d’erreurs similaires
         // Ici on définit "erreur similaire" comme:
         //   - même machine
@@ -230,12 +234,47 @@ public class PlcAnomalyDetectionService {
         // 7) Severity / criticité (business)
         a.setSeverity(computeSeverity(hits, sig, errStats, intervalS, nominalS).name());
 
-        System.out.println("Anomaly detected ! ");
-        plcAnomalyRepository.saveAndFlush(a);
+        PlcAnomaly aRes = null;
+        if (!plcAnomalyRepository.existsByPlcEventId(event.getId())) {
+            aRes = plcAnomalyRepository.saveAndFlush(a);
+            log.info("[Detector]  anomaly  Detecté => persistance et prompt LLM ! ");
 
-        // Important: build prompt AFTER save; on est toujours en transaction ici.
-        promptBuilderService.buildPrompt(getScenarioNominal(a), a);
+            RunnerConstante rc = runnerConstanteRepository.findAll().stream().findFirst().get();
+            rc.setLastAnomalyAnalise(aRes.getId());
+            runnerConstanteRepository.save(rc);
+        } else {
+            aRes = plcAnomalyRepository.findAllByPlcEventId(event.getId()).stream().findFirst().get();
+        }
+        a.setId(aRes.getId());
+        anomalyPromptService.buildPrompt(
+                getScenarioNominal(a),
+                a
+        );
     }
+
+    public void generateLLMPrompt(PlcAnomaly a) {
+
+        Executor LLM_EXECUTOR =
+                Executors.newSingleThreadExecutor(r -> {
+                    Thread t = new Thread(r);
+                    t.setName("llm-prompt-thread");
+                    t.setDaemon(true);
+                    return t;
+                });
+
+
+        LLM_EXECUTOR.execute(() -> {
+            try {
+                anomalyPromptService.buildPrompt(
+                        getScenarioNominal(a),
+                        a
+                );
+            } catch (Exception e) {
+                System.err.println("[LLM] Prompt generation failed for anomaly " + e);
+            }
+        });
+    }
+
 
     // =========================================================
     // INTERVAL STEP
@@ -250,22 +289,6 @@ public class PlcAnomalyDetectionService {
     // "SIMILAR ERRORS" STATS (occurrence + stddev)
     // =========================================================
 
-    /**
-     * Objectif:
-     * - mesurer "survenue d'erreurs similaires" sur une fenêtre de jours
-     * - produire un z-score basé sur la distribution quotidienne
-     * <p>
-     * Implémentation:
-     * - on récupère la série journalière "compte d'erreurs" sur 2*windowDays
-     * - baseline = première moitié, recent = seconde moitié
-     * - stddev calculé sur baseline; zScore = (recentMean - baseMean) / stddev
-     * <p>
-     * Pré-requis côté StepStatsService:
-     * - une méthode dailySimilarErrorSeries(machineId, stepId, errorCode, since)
-     * <p>
-     * Si tu ne l’as pas, je te donne quand même un fallback:
-     * - on réutilise dailyOccurrenceSeries() (anomalies) mais c'est moins "error similaire".
-     */
     private SimilarErrorStats computeSimilarErrorStats(PlcEvent event, int windowDays) {
         OffsetDateTime now = OffsetDateTime.now();
         OffsetDateTime since = now.minusDays(windowDays * 2L);
@@ -277,10 +300,6 @@ public class PlcAnomalyDetectionService {
             return new SimilarErrorStats(0, 0.0, 0.0, 0.0, 0.0);
         }
 
-        // --- TRY: if you implemented a dedicated series for "similar errors"
-        // double[] series = stepStatsService.dailySimilarErrorSeries(machineId, stepId, event.getCode(), since);
-
-        // --- FALLBACK: use anomaly series (less precise but better than nothing)
         double[] series = stepStatsService.dailyOccurrenceSeries(event.getMachine(), event.getProductionStep(), since);
 
         if (series == null || series.length == 0) {

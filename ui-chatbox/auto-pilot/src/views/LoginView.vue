@@ -14,7 +14,7 @@ async function submit() {
   error.value = null
   loading.value = true
   try {
-    const res = await api.post('/api/auth/login', { username: username.value, password: password.value })
+    const res = await api.post('/auth/login', { username: username.value, password: password.value })
     auth.setToken(res.data.access_token)
     router.push('/')
   } catch (e: any) {

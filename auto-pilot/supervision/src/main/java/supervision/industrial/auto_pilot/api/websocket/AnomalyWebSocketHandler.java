@@ -1,7 +1,8 @@
-package supervision.industrial.auto_pilot.websocket;
+package supervision.industrial.auto_pilot.api.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dependancy_bundle.model.PlcAnomaly;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,14 +14,14 @@ import org.springframework.stereotype.Component;
 public class AnomalyWebSocketHandler extends SocketHandler {
 
 
-    public void emitAnomalieCompleted() {
+    public void emitAnomalieCompleted(PlcAnomaly plcAnomaly) {
         try {
             ObjectMapper mapper = new ObjectMapper();
             ObjectNode root = mapper.createObjectNode();
             root.put("event", "anomalie");
 
             ObjectNode data = mapper.createObjectNode();
-            data.put("status", "completed");
+            data.put("anomaly", mapper.writeValueAsString(plcAnomaly));
 
             root.set("data", data);
 

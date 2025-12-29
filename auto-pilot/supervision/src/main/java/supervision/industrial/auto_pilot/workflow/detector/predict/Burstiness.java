@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.service.detector.predict;
+package supervision.industrial.auto_pilot.workflow.detector.predict;
 
 /**
  * Burstiness B = (sigma - mu) / (sigma + mu) borné [-1,1]

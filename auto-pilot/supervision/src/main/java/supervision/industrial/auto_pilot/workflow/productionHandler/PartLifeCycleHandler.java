@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.workflow.workflowService;
+package supervision.industrial.auto_pilot.workflow.productionHandler;
 
 import dependancy_bundle.model.Machine;
 import dependancy_bundle.model.Part;
@@ -10,24 +10,13 @@ import dependancy_bundle.repository.PlcEventRepository;
 import dependancy_bundle.repository.ProductionStepRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import supervision.industrial.auto_pilot.api.websocket.PartWebSocketUpdate;
 import supervision.industrial.auto_pilot.workflow.detector.PlcAnomalyDetectionService;
 import supervision.industrial.auto_pilot.workflow.detector.WorkflowNominalService;
-import supervision.industrial.auto_pilot.websocket.PartWebSocketUpdate;
 
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
-
-/**
- * Orchestration métier de fin de vie d'une pièce.
- * <p>
- * RESPONSABILITÉS :
- * - décider quand une pièce est REJECTED / SCRAPPED / FINISHED
- * - déclencher l'analyse d'anomalies UNIQUEMENT à ces moments
- * <p>
- * AUCUNE logique de détection ici.
- */
 
 @Service
 @RequiredArgsConstructor
@@ -54,8 +43,7 @@ public class PartLifeCycleHandler {
     }
 
 
-    @Transactional
-    public void updatePartFromEvent(PlcEvent event,boolean endCycle) {
+    public void updatePartFromEvent(PlcEvent event, boolean endCycle) {
 
         System.out.println("New Event receive : " + event.getProductionStep().getStepCode());
 
@@ -103,7 +91,7 @@ public class PartLifeCycleHandler {
         partRepository.save(part);
         workorderHandler.computeWorkorder(event);
 
-        partWebSocketUpdate.emitPartCompleted();
+        partWebSocketUpdate.emitPartCompleted(part);
 
         return true;
     }
@@ -140,7 +128,7 @@ public class PartLifeCycleHandler {
 
         partRepository.save(part);
         workorderHandler.computeWorkorder(event);
-        partWebSocketUpdate.emitPartCompleted();
+        partWebSocketUpdate.emitPartCompleted(part);
 
         return true;
     }
@@ -157,7 +145,7 @@ public class PartLifeCycleHandler {
         if (!lastStep.getStepCode().equals(event.getProductionStep().getStepCode())) return false;
 
         Part part = partRepository
-                .findByExternalPartId(event.getPart().getExternalPartId())
+                .findById(event.getPart().getId())
                 .orElse(null);
 
         if (part == null || isTerminalStatus(part)) {
@@ -168,7 +156,7 @@ public class PartLifeCycleHandler {
         part.setFinishedAt(event.getTs() != null ? event.getTs() : OffsetDateTime.now());
 
         partRepository.save(part);
-        partWebSocketUpdate.emitPartCompleted();
+        partWebSocketUpdate.emitPartCompleted(part);
         workorderHandler.computeWorkorder(event);
 
         return true;
@@ -179,12 +167,8 @@ public class PartLifeCycleHandler {
     // =========================
 
     private void triggerAnomalyDetection(Part part) {
-
-        OffsetDateTime end = OffsetDateTime.now();
-        OffsetDateTime start = end.minusDays(2);
-
         List<PlcEvent> events = plcEventRepository
-                .findByPartAndTsBetween(part, start, end);
+                .findByPart(part);
 
         for (PlcEvent e : events) {
             anomalyDetectionService.detectAndPersist(e);

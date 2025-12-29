@@ -1,10 +1,15 @@
 package dependancy_bundle.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.OffsetDateTime;
 import java.util.List;
 
+@Getter
+@Setter
 @Entity
 @Table(
         name = "part",
@@ -57,25 +62,14 @@ public class Part {
      * Relation basée sur external_part_id.
      * LAZY + non propriétaire = SAFE.
      */
-    @OneToMany(fetch = FetchType.LAZY)
-    @JoinColumn(
-            name = "part_id",                // plc_events.part_id
-            referencedColumnName = "external_part_id",
-            insertable = false,
-            updatable = false
-    )
+    @JsonIgnore
+    @OneToMany(mappedBy = "part", fetch = FetchType.LAZY)
     private List<PlcEvent> plcEvents;
-
     /**
      * Toutes les anomalies détectées pour cette pièce.
      */
-    @OneToMany(fetch = FetchType.LAZY)
-    @JoinColumn(
-            name = "part_id",                // plc_anomalies.part_id
-            referencedColumnName = "external_part_id",
-            insertable = false,
-            updatable = false
-    )
+    @JsonIgnore
+    @OneToMany(mappedBy = "part", fetch = FetchType.LAZY)
     private List<PlcAnomaly> plcAnomalies;
 
     // =========================
@@ -88,55 +82,5 @@ public class Part {
         }
     }
 
-    // =========================
-    // Getters / Setters
-    // =========================
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getExternalPartId() {
-        return externalPartId;
-    }
-
-    public void setExternalPartId(String externalPartId) {
-        this.externalPartId = externalPartId;
-    }
-
-    public Integer getLineId() {
-        return lineId;
-    }
-
-    public void setLineId(Integer lineId) {
-        this.lineId = lineId;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public OffsetDateTime getFinishedAt() {
-        return finishedAt;
-    }
-
-    public void setFinishedAt(OffsetDateTime finishedAt) {
-        this.finishedAt = finishedAt;
-    }
-
-    public List<PlcEvent> getPlcEvents() {
-        return plcEvents;
-    }
-
-    public List<PlcAnomaly> getPlcAnomalies() {
-        return plcAnomalies;
-    }
 }

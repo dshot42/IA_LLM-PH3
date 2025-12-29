@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.websocket;
+package supervision.industrial.auto_pilot.api.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;

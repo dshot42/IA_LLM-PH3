@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.config;
+package supervision.industrial.auto_pilot.api.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

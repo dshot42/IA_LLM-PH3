@@ -92,7 +92,7 @@ class Database:
         
         # Formater l'historique en texte
                     
-        schema_file = r"C:\Users\come_\Desktop\ia-llm\phi3\project\workflow\ligne_PLC-advanced\create_db.sql"
+        schema_file =Config.sql_database
         with open(schema_file, "r", encoding="utf-8", errors="ignore") as f:
             schema_text = f.read()
         

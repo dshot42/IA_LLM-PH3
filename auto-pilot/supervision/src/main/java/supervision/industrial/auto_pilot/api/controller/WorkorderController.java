@@ -1,9 +1,9 @@
-package supervision.industrial.auto_pilot.controller;
+package supervision.industrial.auto_pilot.api.controller;
 
 import org.springframework.web.bind.annotation.*;
-import supervision.industrial.auto_pilot.dto.PageResponse;
-import supervision.industrial.auto_pilot.dto.WorkorderDetailResponse;
-import supervision.industrial.auto_pilot.service.WorkorderHandler;
+import supervision.industrial.auto_pilot.api.dto.PageResponse;
+import supervision.industrial.auto_pilot.api.dto.WorkorderDetailResponse;
+import supervision.industrial.auto_pilot.api.service.WorkorderService;
 
 import java.util.List;
 
@@ -11,9 +11,9 @@ import java.util.List;
 @RequestMapping("/api/workorders")
 public class WorkorderController {
 
-    private final WorkorderHandler service;
+    private final WorkorderService service;
 
-    public WorkorderController(WorkorderHandler service) {
+    public WorkorderController(WorkorderService service) {
         this.service = service;
     }
 

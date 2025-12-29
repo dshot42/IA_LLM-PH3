@@ -1,9 +1,9 @@
-package supervision.industrial.auto_pilot.controller;
+package supervision.industrial.auto_pilot.api.controller;
 
 import org.springframework.stereotype.Service;
-import supervision.industrial.auto_pilot.dto.PageResponse;
-import supervision.industrial.auto_pilot.dto.PartDetailResponse;
-import supervision.industrial.auto_pilot.service.PartHandler;
+import supervision.industrial.auto_pilot.api.dto.PageResponse;
+import supervision.industrial.auto_pilot.api.dto.PartDetailResponse;
+import supervision.industrial.auto_pilot.api.service.PartService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,9 +13,9 @@ import java.util.List;
 @RequestMapping("/api")
 public class PartController {
 
-    private final PartHandler service;
+    private final PartService service;
 
-    public PartController(PartHandler service) {
+    public PartController(PartService service) {
         this.service = service;
     }
 
@@ -30,7 +30,7 @@ public class PartController {
         return new PageResponse<>(items, total, page, pageSize);
     }
 
-    @GetMapping("/{partId}")
+    @GetMapping("/parts/{partId}")
     public PartDetailResponse detail(
             @PathVariable String partId,
             @RequestParam(defaultValue = "200") int events_limit,

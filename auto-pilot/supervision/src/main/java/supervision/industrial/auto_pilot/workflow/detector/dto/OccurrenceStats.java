@@ -1,4 +1,4 @@
-package supervision.industrial.auto_pilot.service.detector.dto;
+package supervision.industrial.auto_pilot.workflow.detector.dto;
 
 public record OccurrenceStats(
         long occurrences,
