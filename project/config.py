@@ -57,7 +57,7 @@ class BaseConfig(object):
 
     CHUNK_SIZE=1000 # taille des chunks de doc pour FAISS 
     RAG_MIN_SCORE=0.75 #seuil min de pertinence pour repondre en RAG 0.7 
-    RAG_MIN_SCORE_WORKFLOW=0.5
+    RAG_MIN_SCORE_WORKFLOW=0.6
     nb_chunks_to_use=1000
     #on prend en compte les X meilleurs chunks  
     #et on check si > RAG_MIN_SCORE pour la reponse RAG avant prompt a mon model LLM, 5 à 10 pour gros LLM 7B

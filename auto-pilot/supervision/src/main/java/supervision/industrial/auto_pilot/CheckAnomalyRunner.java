@@ -41,14 +41,14 @@ public class CheckAnomalyRunner {
                 .stream()
                 //.filter(e -> e.getLevel().equals("ERROR"))
                 .sorted(Comparator.comparing(PlcAnomaly::getId).reversed())
-                .limit(10)
+                .limit(5)
                 .toList();
 
         System.out.println("Found " + plcAnomalies.size() + " plc anomalies");
         plcAnomalies.forEach(a -> {
             try {
                 anomalyDetectionService.detectAndPersist(a.getPlcEvent());
-                Thread.sleep(10_000);
+                Thread.sleep(100_000);
             } catch (InterruptedException ex) {
                 throw new RuntimeException(ex);
             }

@@ -9,9 +9,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import supervision.industrial.auto_pilot.MainConfig;
 import supervision.industrial.auto_pilot.api.config.AppConfig;
+import supervision.industrial.auto_pilot.api.dto.AnomalyContext;
+import supervision.industrial.auto_pilot.api.dto.PlcAnomalyDto;
+import supervision.industrial.auto_pilot.api.service.AnomalyContextBuilder;
 import supervision.industrial.auto_pilot.api.websocket.AnomalyWebSocketHandler;
 import supervision.industrial.auto_pilot.workflow.detector.dto.AnomalyToPromptDto;
 import supervision.industrial.auto_pilot.workflow.mapper.PlcAnomalyMapper;
+
+import java.time.OffsetDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -25,6 +31,9 @@ public class AnomalyPromptService {
 
     @Autowired
     private AnomalyWebSocketHandler anomalyWebSocketHandler;
+
+    @Autowired
+    private AnomalyContextBuilder anomalyContextBuilder;
 
 
     private boolean isSeverePostMortem(PlcAnomaly a) {
@@ -118,7 +127,6 @@ public class AnomalyPromptService {
             - Technique
             - Direct
             - Orienté terrain
-            - Phrases courtes
             - Aucun ton narratif
             """;
 
@@ -145,7 +153,61 @@ public class AnomalyPromptService {
         return temporalDeviationType;
     }
 
-    public void buildPrompt(String scenarioNominal, PlcAnomaly a) {
+    public void buildPrompt(PlcAnomaly a) {
+        AnomalyContext anomalyContext = anomalyContextBuilder.build(a);
+
+
+        var r = anomalyContext.reccurenceAnomalyAnalyseDto();
+
+        String recurrenceBlock = r == null ? "" : String.format("""
+                        
+                        ANALYSE DE RÉCURRENCE TEMPORELLE :
+                        - Fenêtre d’analyse        : %d jours
+                        - Occurrences observées   : %d
+                        - Intervalle moyen        : %.2f s
+                        - Écart-type intervalle   : %.2f s
+                        - Overrun moyen           : %.2f s
+                        - Écart-type overrun      : %.2f s
+                        - Fréquence en hausse     : %s
+                        - Impact temporel en hausse : %s
+                        - Tendance globale : %s
+                        """,
+                r.windowDays(),
+                r.totalOccurrences(),
+                r.meanIntervalS(),
+                r.stdDevIntervalS(),
+                r.meanOverrunS(),
+                r.stdDevOverrunS(),
+                r.frequencyIncreasing() ? "OUI" : "NON",
+                r.overrunIncreasing() ? "OUI" : "NON",
+                r.trendConclusion()
+        );
+
+
+        /// ////////////////////
+
+        List<PlcAnomalyDto> similar = anomalyContext.allSimilarAnomalies();
+
+        int similarCount = similar != null ? similar.size() : 0;
+
+        boolean veryRecentRecurrence = false;
+        if (similarCount > 0) {
+            OffsetDateTime last = OffsetDateTime.parse(similar.get(0).plcEventTs()); // si tri DESC
+            veryRecentRecurrence = last.isAfter(OffsetDateTime.now().minusMinutes(10));
+        }
+        String similarHistoryBlock = similarCount == 0 ? "" : String.format("""
+                        
+                        HISTORIQUE DES ANOMALIES SIMILAIRES :
+                        - Nombre d’anomalies similaires récentes : %d
+                        - Récurrence très récente (< 10 min)     : %s
+                        - Analyse :
+                          Ces anomalies concernent des étapes comparables du workflow
+                          et doivent être prises en compte dans l’évaluation de la criticité.
+                        """,
+                similarCount,
+                veryRecentRecurrence ? "OUI" : "NON"
+        );
+
 
         String userPrompt = String.format("""
                         OBJECTIF :
@@ -175,6 +237,10 @@ public class AnomalyPromptService {
                         - Confiance          : %s
                         - Sévérité           : %s
                         
+                        %s
+                        
+                        %s
+                        
                         FORMAT DE SORTIE OBLIGATOIRE :
                         
                         ANOMALIE :
@@ -191,10 +257,15 @@ public class AnomalyPromptService {
                         Si non quantifiable, écrire explicitement : NON ÉVALUABLE.
                         
                         CRITICITÉ :
-                        Justifier la criticité à partir des indicateurs.
+                        Justifier la criticité à partir :
+                        - de l’écart mesuré
+                        - des règles déclenchées
+                        - des indicateurs statistiques
+                        - des tendances de récurrence temporelle
+                        - de l’historique des anomalies similaires
                         
                         CONCLUSION :
-                        2 à 3 phrases maximum.
+                        Conclusion explicite, factuelle et complète.
                         """,
                 a.getPart().getExternalPartId(),
                 a.getMachine().getCode(),
@@ -210,11 +281,13 @@ public class AnomalyPromptService {
                 a.getRateRatio(),
                 a.getHawkesScore(),
                 a.getConfidence(),
-                a.getSeverity()
+                a.getSeverity(),
+                recurrenceBlock,
+                similarHistoryBlock
         );
 
 
-        String reportPath = sendPost(SYSTEM_PROMPT, userPrompt, a);
+        String reportPath = sendPost(SYSTEM_PROMPT, userPrompt, a, anomalyContext);
         a.setReportPath(reportPath);
         plcAnomalyRepository.save(a);
         anomalyWebSocketHandler.emitAnomalieCompleted(a);
@@ -229,11 +302,11 @@ public class AnomalyPromptService {
     }
 
 
-    public String sendPost(String systemPrompt, String userPrompt, PlcAnomaly anomaly) {
+    public String sendPost(String systemPrompt, String userPrompt, PlcAnomaly anomaly, AnomalyContext anomalyContext) {
         try {
             if (!MainConfig.boowithLLM) return null;
             String url = AppConfig.getUrl("/ia_api/anomaly");
-            AnomalyToPromptDto dto = PlcAnomalyMapper.toDto(anomaly);
+            AnomalyToPromptDto dto = PlcAnomalyMapper.toDto(anomaly, anomalyContext);
             AnomalyRequest request = new AnomalyRequest(systemPrompt, userPrompt, dto);
 
             log.info("Anomaly -> Send Anomaly PROMPT to LLM  ");

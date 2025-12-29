@@ -30,7 +30,7 @@ public class PlcEvent {
 
     // si gestion par lot , null
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "part_id")
+    @JoinColumn(name = "part_id", nullable = true)
     private Part part;
 
 

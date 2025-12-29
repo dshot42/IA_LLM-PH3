@@ -1,6 +1,5 @@
 from decimal import Decimal
 from typing import List
-from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
@@ -14,7 +13,8 @@ import os.path as op
 from pathlib import Path
 import re
 from reportlab.lib.enums import TA_LEFT,TA_CENTER
-from ia.generate_repport import build_styles, split_llm_sections
+from ia.generate_repport import build_styles
+
 
 dark_line = colors.Color(
     11/255,
@@ -50,16 +50,47 @@ def repportLLM_TRS(
     # =========================
     trs_meta = {
         "Période analysée": f"{dateStart} → {dateEnd}",
-        "TRS global": round(trs["trs"], 4),
-        "Performance": round(trs["performance"], 4),
-        "Qualité": round(trs["quality"], 4),
-        "Steps analysés": trs["totalSteps"],
-        "Steps OK": trs["goodSteps"],
-        "Steps NOK": trs["badSteps"],
-        "Temps nominal cumulé (s)": round(trs["totalTheoreticalTimeS"], 2),
-        "Temps réel cumulé (s)": round(trs["totalRealTimeS"], 2),
+
+        "TRS global (Performance × Qualité)": {
+            "valeur": round(trs["trs"], 4),
+            "definition": "Correspond à la performance multipliée par la qualité"
+        },
+
+        "Performance de production": {
+            "valeur": round(trs["performance"], 4),
+            "definition": "Correspond au rendement machine : Temps nominal / Temps réel"
+        },
+
+        "Qualité": {
+            "valeur": round(trs["quality"], 4),
+            "definition": "Correspond au ratio pièces bonnes / pièces totales"
+        },
+
+        "Étapes analysées": trs["totalSteps"],
+
+        "Étapes bonnes": {
+            "valeur": trs["goodSteps"],
+            "definition": "Nombre d’étapes exécutées conformément au workflow nominal"
+        },
+
+        "Étapes mauvaises": {
+            "valeur": trs["badSteps"],
+            "definition": "Nombre d’étapes présentant un écart ou une anomalie"
+        },
+
+        "Temps nominal cumulé (s)": {
+            "valeur": round(trs["totalTheoreticalTimeS"], 2),
+            "definition": "Somme des durées nominales attendues pour les étapes analysées"
+        },
+
+        "Temps réel cumulé (s)": {
+            "valeur": round(trs["totalRealTimeS"], 2),
+            "definition": "Somme des durées réellement observées pour les étapes analysées"
+        },
+
         "Date génération": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
+
 
     impact_table = [
         {
@@ -126,7 +157,7 @@ def _impact_table(impact_table: list):
     Table structurée impacts.
     impact_table: List[dict] avec clés Machine, Step, Occurrences, Sur-durée..., etc.
     """
-    headers = ["Machine", "Step", "Occ", "Overrun(s)", "Impact TRS(%)", "Danger", "Reinf."]
+    headers = ["Machine", "Step", "Occurrences", "Overrun(s)", "Impact TRS(%)", "Danger", "Renforcement"]
     data = [headers]
 
     for l in impact_table:
@@ -232,7 +263,10 @@ def generate_pdf_report_TRS(filename, trs_meta, impact_table, llm_result, dateSt
     # =========================
     # ANALYSE LLM
     # =========================
-    story.append(Paragraph("Analyse IA", styles["Heading2"] if "Heading2" in styles else styles["Heading2"]))
+    
+    story.append(PageBreak())
+
+    story.append(Paragraph("Analyse IA", styles["Title"]))
     story.append(Spacer(1, 8))
 
     llm_sections = split_llm_sections(llm_result) if "split_llm_sections" in globals() else {"Résultat": llm_result}
@@ -364,3 +398,59 @@ def generate_pdf_report_TRS_debug(filename, title, sections):
         raise
 
     
+def split_llm_sections(text: str):
+    """
+    Découpe un texte LLM en sections lisibles.
+    Tolère :
+    - titres finissant par :
+    - TITRES EN MAJUSCULES
+    - séparateurs =====
+    - fallback si aucune section détectée
+    """
+
+    sections = {}
+    current_title = None
+    buffer = []
+
+    lines = text.splitlines()
+
+    def flush():
+        nonlocal buffer, current_title
+        if current_title and buffer:
+            sections[current_title] = "\n".join(buffer).strip()
+        buffer = []
+
+    for raw in lines:
+        line = raw.strip()
+
+        # ===== TITRE TYPE "====="
+        if re.match(r"^=+$", line):
+            continue
+
+        # TITRE EXPLICITE "Titre :"
+        if line.endswith(":") and len(line) < 80:
+            flush()
+            current_title = line[:-1].strip()
+            continue
+
+        # TITRE EN MAJUSCULES
+        if (
+            len(line) > 5
+            and len(line) < 80
+            and line.isupper()
+            and not line.endswith(".")
+        ):
+            flush()
+            current_title = line.strip()
+            continue
+
+        buffer.append(line)
+
+    flush()
+
+    # 🔒 FALLBACK ABSOLU
+    if not sections:
+        return {"Analyse": text.strip()}
+
+    return sections
+

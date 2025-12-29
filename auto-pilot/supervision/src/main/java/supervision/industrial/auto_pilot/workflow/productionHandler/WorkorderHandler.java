@@ -54,20 +54,21 @@ public class WorkorderHandler {
         return productionStepRepo.findById(lastProdStep.getId()).get();
     }
 
-    public List<ProductionStep> getProductionStep(Workorder wo) {
+    public List<ProductionStep> getProductionSteps(Workorder wo) {
         if (wo == null
                 || wo.getProductionScenario() == null
                 || wo.getProductionScenario().getProductionScenarioSteps() == null) {
-            return null;
+            return List.of();
         }
 
-        return wo
-                .getProductionScenario()
+        return wo.getProductionScenario()
                 .getProductionScenarioSteps()
                 .stream()
+                .sorted(Comparator.comparingLong(ProductionScenarioStep::getStepOrder)) // adapte le getter
                 .map(ProductionScenarioStep::getProductionStep)
                 .toList();
     }
+
 
     public List<ProductionScenarioStep> getProductionScenarioStep(Workorder wo) {
         if (wo == null

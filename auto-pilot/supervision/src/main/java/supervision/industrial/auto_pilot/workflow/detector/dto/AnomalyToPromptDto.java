@@ -1,6 +1,8 @@
 package supervision.industrial.auto_pilot.workflow.detector.dto;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import supervision.industrial.auto_pilot.api.dto.AnomalyContext;
+
 import java.time.OffsetDateTime;
 
     public record AnomalyToPromptDto(
@@ -42,5 +44,6 @@ import java.time.OffsetDateTime;
             String severity,
 
             OffsetDateTime createdAt,
-            String reportPath
+
+            AnomalyContext anomalyContext
     ) {}

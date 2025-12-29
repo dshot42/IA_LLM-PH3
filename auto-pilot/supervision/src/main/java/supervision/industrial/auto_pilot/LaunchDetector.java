@@ -77,7 +77,7 @@ public class LaunchDetector {
             PlcEvent evt = newEvents.get(i);
             if (evt == null) continue;
 
-            if (plcAnomalyRepository.existsByPlcEventId(evt.getId())) {
+            if (plcAnomalyRepository.findByPlcEventId(evt.getId()).isPresent()) {
                 log.debug(
                         "[EVENT-POLL] Event {} déjà analysé (anomalie existante), skip",
                         evt.getId()

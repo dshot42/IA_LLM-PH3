@@ -1,233 +1,155 @@
 from decimal import Decimal
-from typing import List
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak,HRFlowable
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet,ParagraphStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
 from datetime import date, datetime
-from flask import send_file,abort
-from config import Config
+from flask import send_file, abort
+from pathlib import Path
 import os
 import os.path as op
-from pathlib import Path
 import re
-from reportlab.lib.enums import TA_LEFT,TA_CENTER
+from config import Config
 
+# ======================================================
+# CONSTANTS
+# ======================================================
 
-dark_line = colors.Color(
-    11/255,
-    15/255,
-    23/255,
-    alpha=0.85
-)
+dark_line = colors.Color(11/255, 15/255, 23/255, alpha=0.85)
 
-def download_report(repport_name):
-    file_path = op.join(Config.rapport_llm_export,repport_name)  # chemin réel du fichier
-    if not os.path.exists(file_path):
-        abort(404, description="Fichier introuvable")
-
-    return send_file(
-        file_path,
-        as_attachment=True,
-        download_name=repport_name,
-        mimetype="application/pdf"
-    )
-
-############### PARSE LLM RESULT -> version debug -> texte brut avec prompt  ################# 
-
+# ======================================================
+# DEBUG UTIL
+# ======================================================
 
 def content_to_text(content) -> str:
-    """
-    Convertit n'importe quel contenu en texte affichable PDF
-    (dict, list, datetime, None, etc.)
-    """
     if content is None:
         return ""
-
     if isinstance(content, str):
         return content
-
     if isinstance(content, (datetime, date)):
         return content.isoformat()
-
     if isinstance(content, Decimal):
         return str(float(content))
-
     if isinstance(content, dict):
-        lines = []
-        for k, v in content.items():
-            lines.append(f"{k} : {v}")
-        return "\n".join(lines)
-
+        return "\n".join(f"{k} : {v}" for k, v in content.items())
     if isinstance(content, list):
         return "\n".join(str(v) for v in content)
-
     return str(content)
 
-def generate_pdf_report_debug(filename, title, sections):
-    doc = SimpleDocTemplate(
-        filename,
-        pagesize=A4,
-        rightMargin=2*cm,
-        leftMargin=2*cm,
-        topMargin=2*cm,
-        bottomMargin=2*cm
-    )
 
-    styles = getSampleStyleSheet()
-    story = []
+    
+def render_recurrence_analysis(story, styles, r):
+    if not r:
+        return
 
-    # Titre
-    story.append(Paragraph(f"<b>{title}</b>", styles["Title"]))
-    story.append(Spacer(1, 12))
+    story.append(PageBreak())
 
-    # Date
     story.append(Paragraph(
-        f"Date : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        styles["Normal"]
+        "ANALYSE DE RÉCURRENCE TEMPORELLE",
+        styles["SectionTitle"]
     ))
-    story.append(Spacer(1, 20))
 
-    # Sections
-    for section_title, content in sections:
-        story.append(Paragraph(f"<b>{section_title}</b>", styles["Heading2"]))
-        story.append(Spacer(1, 8))
-        text = content_to_text(content)
-        story.append(
-            Paragraph(
-                text.replace("\n", "<br/>"),
-                styles["Normal"]
-            )
+    text = f"""
+    <b>Fenêtre d’analyse</b> : {r['windowDays']} jours<br/>
+    <i>Période temporelle utilisée pour analyser la répétition des anomalies similaires.</i><br/><br/>
+
+    <b>Occurrences observées</b> : {r['totalOccurrences']}<br/>
+    <i>Nombre total d’anomalies similaires détectées sur la période analysée.</i><br/><br/>
+
+    <b>Intervalle moyen entre occurrences</b> : {r['meanIntervalS']:.2f} s<br/>
+    <i>Temps moyen séparant deux anomalies successives. Un intervalle court indique une récurrence élevée.</i><br/><br/>
+
+    <b>Écart-type de l’intervalle</b> : {r['stdDevIntervalS']:.2f} s<br/>
+    <i>Mesure de la variabilité des intervalles. Une valeur faible indique une répétition régulière.</i><br/><br/>
+
+    <b>Overrun moyen</b> : {r['meanOverrunS']:.2f} s<br/>
+    <i>Écart moyen entre la durée réelle et la durée nominale lors des anomalies.</i><br/><br/>
+
+    <b>Écart-type de l’overrun</b> : {r['stdDevOverrunS']:.2f} s<br/>
+    <i>Variabilité de l’impact temporel des anomalies sur le cycle de production.</i><br/><br/>
+
+    <b>Fréquence des anomalies en hausse</b> : {"OUI" if r['frequencyIncreasing'] else "NON"}<br/>
+    <i>Indique si les anomalies surviennent de plus en plus fréquemment au fil du temps.</i><br/><br/>
+
+    <b>Impact temporel en hausse</b> : {"OUI" if r['overrunIncreasing'] else "NON"}<br/>
+    <i>Indique si l’impact des anomalies sur la durée du cycle tend à s’aggraver.</i><br/><br/>
+
+    <b>Conclusion de tendance globale</b> : 
+    <b>{r['trendConclusion']}</b><br/>
+    <i>Synthèse de l’évolution temporelle combinant fréquence et impact.</i>
+    """
+
+    story.append(Paragraph(text, styles["Body"]))
+
+
+# ======================================================
+# STYLES
+# ======================================================
+def SectionTitle(text: str,styles):
+    return [
+        Paragraph(text, styles["SectionTitle"]),
+        HRFlowable(
+            width="100%",
+            thickness=1.1,
+            color=dark_line,
+            spaceBefore=2,
+            spaceAfter=10
         )
-        story.append(Spacer(1, 16))
-
-    try:
-        doc.build(story)
-    except Exception as e:
-        print("[PDF][TRS] build failed:", e)
-        raise
-
-def repportLLM_debug(result_llm, anomalies, prompt):
-    
-    sections = [
-        ("Résultat Anomalie constaté : ",anomalies),
-        ("Prompt : ", prompt),
-        ("#####################", ""),
-        ("Résultat IA", result_llm)
     ]
-
-    folder = Path(
-        Config.rapport_llm_export,
-        datetime.now().strftime("%Y%m%d"),
-        "anomaly",
-        "debug"
-    )
-
-    folder.mkdir(parents=True, exist_ok=True)
-    filename = op.join(
-        folder,
-        f"rapport_llm_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    )
-    generate_pdf_report_debug(
-        filename = filename,
-        title="Rapport de Supervision IA - ",
-        sections=sections
-    )
-    return filename
     
-
-
-############### PARSE LLM RESULT -> version clean  ################# 
-
 def build_styles():
     styles = getSampleStyleSheet()
 
-    # =========================
-    # TITLE (override)
-    # =========================
-    title = styles["Title"]
-    title.fontSize = 18
-    title.leading = 22
-    title.fontName = "Helvetica-Bold"
-    title.textColor = colors.white
-    title.backColor = dark_line
-    title.alignment = TA_CENTER
-    title.spaceBefore = 16
-    title.spaceAfter = 10
-    title.leftIndent = 6
-    title.rightIndent = 6
-    title.borderPadding = (6, 20, 6, 20)
+    styles["Title"].fontSize = 18
+    styles["Title"].leading = 22
+    styles["Title"].fontName = "Helvetica-Bold"
+    styles["Title"].textColor = colors.white
+    styles["Title"].backColor = dark_line
+    styles["Title"].alignment = TA_CENTER
+    styles["Title"].borderPadding = 12
 
-    # =========================
-    # SECTION TITLE
-    # =========================
-    if "SectionTitle" not in styles:
-        styles.add(ParagraphStyle(name="SectionTitle"))
+    styles.add(ParagraphStyle(
+        name="SectionTitle",
+        fontName="Helvetica-Bold",
+        fontSize=13.5,
+        leading=17,
+        textColor=colors.black,
+        spaceBefore=18,
+        spaceAfter=4,
+    ))
 
-    section = styles["SectionTitle"]
 
-    section.fontSize = 13
-    section.leading = 16
-    section.fontName = "Helvetica-Bold"
+    styles.add(ParagraphStyle(
+        name="Body",
+        fontSize=10.5,
+        leading=14,
+        alignment=TA_LEFT
+    ))
 
-    # 🎯 TEXTE
-    section.textColor = colors.black
-    section.backColor = None 
-
-    # 🎯 ESPACEMENTS
-    section.spaceBefore = 16
-    section.spaceAfter = 8
-    section.leftIndent = 0
-    section.rightIndent = 0
-
-    # 🎯 SOULIGNEMENT PROPRE (bordure basse)
-    section.borderBottomWidth = 1.2
-    section.borderBottomColor = dark_line
-    section.borderPadding = (0, 0, 4, 0) 
-
-    # =========================
-    # BODY
-    # =========================
-    if "Body" not in styles:
-        styles.add(ParagraphStyle(name="Body"))
-
-    body = styles["Body"]
-    body.fontSize = 10.5
-    body.leading = 14
-    body.spaceAfter = 6
-    body.alignment = TA_LEFT
-
-    # =========================
-    # META
-    # =========================
-    if "Meta" not in styles:
-        styles.add(ParagraphStyle(name="Meta"))
-
-    meta = styles["Meta"]
-    meta.fontSize = 9
-    meta.leading = 12
-    meta.textColor = colors.HexColor("#555555")
+    styles.add(ParagraphStyle(
+        name="BlockBox",
+        fontSize=10,
+        leading=14,
+        backColor=colors.HexColor("#F5F7FA"),
+        borderColor=colors.grey,
+        borderWidth=1.5,
+        borderPadding=10,
+        spaceBefore=12,
+        spaceAfter=16
+    ))
 
     return styles
 
+# ======================================================
+# LLM PARSER
+# ======================================================
 
 def split_llm_sections(text: str):
-    """
-    Découpe un texte LLM en sections lisibles.
-    Tolère :
-    - titres finissant par :
-    - TITRES EN MAJUSCULES
-    - séparateurs =====
-    - fallback si aucune section détectée
-    """
-
     sections = {}
     current_title = None
     buffer = []
-
-    lines = text.splitlines()
 
     def flush():
         nonlocal buffer, current_title
@@ -235,42 +157,182 @@ def split_llm_sections(text: str):
             sections[current_title] = "\n".join(buffer).strip()
         buffer = []
 
-    for raw in lines:
+    for raw in text.splitlines():
         line = raw.strip()
 
-        # ===== TITRE TYPE "====="
         if re.match(r"^=+$", line):
             continue
 
-        # TITRE EXPLICITE "Titre :"
         if line.endswith(":") and len(line) < 80:
             flush()
             current_title = line[:-1].strip()
             continue
 
-        # TITRE EN MAJUSCULES
-        if (
-            len(line) > 5
-            and len(line) < 80
-            and line.isupper()
-            and not line.endswith(".")
-        ):
+        if line.isupper() and 5 < len(line) < 80:
             flush()
-            current_title = line.strip()
+            current_title = line
             continue
 
         buffer.append(line)
 
     flush()
+    return sections or {"Analyse": text.strip()}
 
-    # 🔒 FALLBACK ABSOLU
-    if not sections:
-        return {"Analyse": text.strip()}
+# ======================================================
+# RENDER BLOCKS
+# ======================================================
 
-    return sections
+def render_anomaly_block(story, styles, ctx):
+    lines = [
+        f"<b>Machine</b> : {ctx['machineCode']} – {ctx.get('machineName','')}",
+        f"<b>Étape</b> : {ctx['stepCode']} – {ctx.get('stepName','')}",
+        f"<b>Date détection</b> : {ctx['detectedAt']}",
+        f"<b>Pièce concernée</b> : {ctx.get('partId', 'N/A')}",
+        f"<b>Sévérité</b> : <font color='red'><b>{ctx['severity']}</b></font>",
+        f"<b>Score anomalie</b> : {ctx['anomalyScore']}",
+        f"<b>Durée nominale</b> : {ctx['nominalDurationS']} s",
+        f"<b>Durée réelle</b> : {ctx['realDurationS']} s",
+        f"<b>Dépassement</b> : {ctx['overrunS']} s",
+        f"<b>Erreur PLC</b> : {'OUI' if ctx['hasPlcError'] else 'NON'}"
+    ]
+
+    if ctx.get("triggeredRules"):
+        lines.append("<b>Règles déclenchées :</b>")
+        for r in ctx["triggeredRules"]:
+            lines.append(f"- {r.get('ruleCode')} : {r.get('message')}")
+
+    story.append(Paragraph("<br/>".join(lines), styles["BlockBox"]))
 
 
-def generate_pdf_report(filename, anomaly_meta, llm_result):
+
+def render_workflow(story, styles, cycle_trace):
+    story.append(Spacer(1, 20))
+    story.append(Paragraph("WORKFLOW DU CYCLE", styles["SectionTitle"]))
+    story.append(Spacer(1, 20))
+    
+    if not cycle_trace:
+        story.append(Paragraph("Aucun workflow disponible.", styles["Body"]))
+        return
+
+    current_machine = None
+    step_buffer = []
+
+    def flush_machine_block(machine, steps, with_arrow_down=True):
+        if not machine or not steps:
+            return
+
+        content = f"""
+        <b>{machine}</b><br/>
+        {" → ".join(steps)}
+        """
+
+        story.append(
+            Paragraph(content, styles["BlockBox"])
+        )
+
+
+        if with_arrow_down:
+            story.append(Paragraph("↓", styles["Body"]))
+
+        story.append(Spacer(1, 6))
+
+    for s in cycle_trace:
+        machine = s.get("machineCode")
+        step = s.get("stepCode")
+
+        if not machine or not step:
+            continue
+
+        label = step
+        if s.get("anomalyDetected"):
+            label = f"<font color='red'><b>{label}</b></font>"
+
+        # changement de machine
+        if current_machine and machine != current_machine:
+            flush_machine_block(current_machine, step_buffer, with_arrow_down=True)
+            step_buffer = []
+
+        current_machine = machine
+        step_buffer.append(label)
+
+    # dernier bloc sans flèche ↓
+    flush_machine_block(current_machine, step_buffer, with_arrow_down=False)
+
+
+
+# ======================================================
+# 🔥 TABLE DES ANOMALIES SIMILAIRES (PlcAnomalyDto)
+# ======================================================
+
+def render_similar_anomalies_table(story, styles, anomalies):
+
+    story.append(PageBreak())
+
+    story.append(Paragraph(
+        "HISTORIQUE DES ANOMALIES SIMILAIRES",
+        styles["SectionTitle"]
+    ))
+
+    story.append(Spacer(1, 20))
+
+    if not anomalies:
+        story.append(
+            "Aucune Anomalies similaire detecté sur les 7 derniers jours "
+        )
+        return
+    
+    data = [["Date PLC", "Étape", "Nom étape","Anomalie type"]]
+
+    for a in anomalies:
+        data.append([
+            a.get("plcEventTs"),
+            a.get("productionStepCode"),
+            a.get("productionStepName"),
+            a.get("ruleReason")
+        ])
+        
+
+    table = Table(data, colWidths=[4*cm,3*cm, 4*cm, 7*cm])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("FONTSIZE", (0, 1), (-1, -1), 8),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+
+    story.append(table)
+    
+    
+
+def render_llm_analysis(story, styles, llm_text):
+    if not llm_text:
+        return
+
+    story.append(PageBreak())
+    
+    sections = split_llm_sections(llm_text)
+
+    story.append(Paragraph("ANALYSE IA (LLM)", styles["Title"]))
+
+    for title, content in sections.items():
+        story.append(Paragraph(title, styles["SectionTitle"]))
+        story.append(Paragraph(content.replace("\n", "<br/>"), styles["Body"]))
+
+# ======================================================
+# MAIN PIPELINE
+# ======================================================
+
+def generate_pdf_report(filename, anomaly, llm_result):
+    ctx = anomaly["anomalyContext"]
+
     doc = SimpleDocTemplate(
         filename,
         pagesize=A4,
@@ -283,47 +345,27 @@ def generate_pdf_report(filename, anomaly_meta, llm_result):
     styles = build_styles()
     story = []
 
-    # =========================
-    # PAGE DE GARDE
-    # =========================
     story.append(Paragraph(
         "Rapport d’Analyse d’Anomalie de Production",
         styles["Title"]
     ))
     story.append(Spacer(1, 20))
 
-    for k, v in anomaly_meta.items():
-        story.append(Paragraph(f"<b>{k}</b> : {v}", styles["Meta"]))
+    render_anomaly_block(story, styles, ctx)
+    render_workflow(story, styles, ctx["cycleTrace"])
+    render_recurrence_analysis(story, styles, ctx.get("reccurenceAnomalyAnalyseDto"))
+    render_similar_anomalies_table(
+        story, styles, ctx.get("allSimilarAnomalies", [])
+    )
+    render_llm_analysis(story, styles, llm_result)
 
-    story.append(Spacer(1, 30))
+    doc.build(story)
 
-    # =========================
-    # CONTENU LLM STRUCTURÉ
-    # =========================
-    llm_sections = split_llm_sections(llm_result)
+# ======================================================
+# ENTRY POINT
+# ======================================================
 
-    for title, content in llm_sections.items():
-        story.append(Paragraph(title, styles["SectionTitle"]))
-        for paragraph in content.split("\n\n"):
-            story.append(
-                Paragraph(
-                    paragraph.replace("\n", "<br/>"),
-                    styles["Body"]
-                )
-            )
-
-    try:
-        doc.build(story)
-    except Exception as e:
-        print("[PDF][TRS] build failed:", e)
-        raise
-    
-    
 def repportLLM(result_llm, anomaly, prompt):
-    
-    repportLLM_debug(result_llm, anomaly, prompt)
-    
-    
     folder = Path(
         Config.rapport_llm_export,
         datetime.now().strftime("%Y%m%d"),
@@ -332,21 +374,17 @@ def repportLLM(result_llm, anomaly, prompt):
     folder.mkdir(parents=True, exist_ok=True)
 
     filename = folder / f"rapport_anomalie_{anomaly['id']}.pdf"
-
-    anomaly_meta = {
-        "Machine": anomaly["machine"],
-        "Step": anomaly["stepId"],
-        "Pièce": anomaly["partId"],
-        "Cycle": anomaly["cycle"],
-        "Sévérité": anomaly["severity"],
-        "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-
-    generate_pdf_report(
-        filename=str(filename),
-        anomaly_meta=anomaly_meta,
-        llm_result=result_llm
-    )
-
+    generate_pdf_report(str(filename), anomaly, result_llm)
     return str(filename)
 
+def download_report(repport_name):
+    file_path = op.join(Config.rapport_llm_export, repport_name)
+    if not os.path.exists(file_path):
+        abort(404, description="Fichier introuvable")
+
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=repport_name,
+        mimetype="application/pdf"
+    )

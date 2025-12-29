@@ -58,8 +58,8 @@ public final class AnomalyRules {
             if (e.getTs().isBefore(prev.getTs())) {
 
                 ObjectNode d = M.createObjectNode();
-                d.put("previous_event_ts", prev.getTs().toString());
-                d.put("current_event_ts", e.getTs().toString());
+                d.put("previous_event_ts", prev.getTs().toLocalDateTime().toString());
+                d.put("current_event_ts", e.getTs().toLocalDateTime().toString());
                 d.put("trigger_condition", "current_event_ts < previous_event_ts (same part)");
                 d.put(
                         "observed",
@@ -101,8 +101,8 @@ public final class AnomalyRules {
                     if (gapS > threshold) {
 
                         ObjectNode d = M.createObjectNode();
-                        d.put("previous_step_ts", ctx.previousStepTs().toString());
-                        d.put("current_step_ts", e.getTs().toString());
+                        d.put("previous_step_ts", ctx.previousStepTs().toLocalDateTime().toString());
+                        d.put("current_step_ts", e.getTs().toLocalDateTime().toString());
                         d.put("observed_gap_seconds", gapS);
                         d.put("nominal_step_duration_seconds", nominal);
                         d.put("threshold_seconds", threshold);

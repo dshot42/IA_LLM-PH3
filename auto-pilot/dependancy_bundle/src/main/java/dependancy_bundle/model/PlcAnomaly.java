@@ -30,7 +30,7 @@ public class PlcAnomaly {
 
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "part_id", referencedColumnName = "id")
+    @JoinColumn(name = "part_id", referencedColumnName = "id", nullable = true)
     private Part part;
 
     /**

@@ -1,6 +1,7 @@
 package supervision.industrial.auto_pilot.workflow.mapper;
 
 import dependancy_bundle.model.PlcAnomaly;
+import supervision.industrial.auto_pilot.api.dto.AnomalyContext;
 import supervision.industrial.auto_pilot.workflow.detector.dto.AnomalyToPromptDto;
 
 public class PlcAnomalyMapper {
@@ -8,7 +9,7 @@ public class PlcAnomalyMapper {
     private PlcAnomalyMapper() {
     }
 
-    public static AnomalyToPromptDto toDto(PlcAnomaly a) {
+    public static AnomalyToPromptDto toDto(PlcAnomaly a, AnomalyContext anomalyContext) {
 
         return new AnomalyToPromptDto(
 
@@ -61,7 +62,7 @@ public class PlcAnomalyMapper {
                 a.getSeverity(),
 
                 a.getCreatedAt(),
-                a.getReportPath()
+                anomalyContext
         );
     }
 }

@@ -173,19 +173,24 @@ public class TRSPromptHandler {
 
         sb.append(String.format("""
                         PÉRIODE : %s → %s
-                        
-                        TRS global           : %.4f
-                        Performance          : %.4f
-                        Qualité              : %.4f
-                        Temps nominal total  : %.2f s
+                        TRS global           : %.4f (Correspond à la performance * la qualité)
+                        Production Performance          : %.4f (Correspond au rendement machine Réel/Nominal)
+                        Qualité              : %.4f (Correspond a la production de pièce Bonne/Total)
+                        Etape Bonne          : %d
+                        Etape mauvaise       : %d
                         Temps réel total     : %.2f s
+                        Temps nominal total  : %.2f s
+                        
                         """,
                 start, end,
                 trs.trs(),
                 trs.performance(),
                 trs.quality(),
-                trs.totalTheoreticalTimeS(),
-                trs.totalRealTimeS()
+                trs.goodSteps(),
+                trs.badSteps(),
+                trs.totalRealTimeS(),
+                trs.totalTheoreticalTimeS()
+
         ));
 
         sb.append("""
@@ -276,7 +281,7 @@ public class TRSPromptHandler {
             if (!MainConfig.boowithLLM) return null;
             String url = AppConfig.getUrl("/ia_api/trs");
 
-            TRSRequest request = new TRSRequest(prompt.toString(), trs, impact, start.toString(), end.toString());
+            TRSRequest request = new TRSRequest(prompt.toString(), trs, impact, start.toLocalDateTime().toString(), end.toLocalDateTime().toString());
             log.info("TRS -> Send PROMPT to LLM  ");
 
             String result = restTemplate.postForObject(url, request, String.class);

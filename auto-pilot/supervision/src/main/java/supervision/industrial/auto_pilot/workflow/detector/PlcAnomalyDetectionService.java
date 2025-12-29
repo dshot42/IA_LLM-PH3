@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import supervision.industrial.auto_pilot.MainConfig;
 import supervision.industrial.auto_pilot.workflow.detector.dto.OccurrenceStats;
 import supervision.industrial.auto_pilot.workflow.detector.dto.PredictiveSignals;
 import supervision.industrial.auto_pilot.workflow.detector.dto.StepIntervalStats;
@@ -47,6 +48,22 @@ public class PlcAnomalyDetectionService {
     private final RunnerConstanteRepository runnerConstanteRepository;
     private final ProductionStepRepository productionStepRepository;
     private final ProductionScenarioStepRepository productionScenarioStepRepository;
+
+
+    ///  /////////////
+    // Récurrence temporelle
+    private Double meanIntervalS;
+    private Double stdDevIntervalS;
+
+    // Impact temporel
+    private Double meanOverrunS;
+    private Double stdDevOverrunS;
+
+    // Tendances
+    private Boolean frequencyIncreasing;
+    private Boolean overrunIncreasing;
+    private String recurrenceTrend; // STABLE | EN_AUGMENTATION | AGGRAVATION
+
 
     // =========================================================
     // NOMINAL SCENARIO (string for prompt)
@@ -234,25 +251,29 @@ public class PlcAnomalyDetectionService {
         // 7) Severity / criticité (business)
         a.setSeverity(computeSeverity(hits, sig, errStats, intervalS, nominalS).name());
 
-        PlcAnomaly aRes = null;
-        if (!plcAnomalyRepository.existsByPlcEventId(event.getId())) {
-            aRes = plcAnomalyRepository.saveAndFlush(a);
-            log.info("[Detector]  anomaly  Detecté => persistance et prompt LLM ! ");
 
+        PlcAnomaly aRes = null;
+        if (plcAnomalyRepository.findByPlcEventId(event.getId()).isEmpty()) {
+            aRes = plcAnomalyRepository.saveAndFlush(a);
+            a.setId(aRes.getId());
+            log.info("[Detector]  anomaly  Detecté => persistance et prompt LLM ! ");
             RunnerConstante rc = runnerConstanteRepository.findAll().stream().findFirst().get();
             rc.setLastAnomalyAnalise(aRes.getId());
             runnerConstanteRepository.save(rc);
         } else {
-            aRes = plcAnomalyRepository.findAllByPlcEventId(event.getId()).stream().findFirst().get();
+            a.setId(plcAnomalyRepository.findByPlcEventId(event.getId()).get().getId());
+            aRes = plcAnomalyRepository.saveAndFlush(a);
+            log.info("[Detector]  anomaly  Detecté => update et prompt LLM ! ");
         }
-        a.setId(aRes.getId());
-        anomalyPromptService.buildPrompt(
-                getScenarioNominal(a),
-                a
-        );
+        /// //////////////////////
+        if (MainConfig.runMode.equals("SIMUATOR")) {
+            anomalyPromptService.buildPrompt(a);
+        } else {
+            generateAsyncLLMPrompt(a);
+        }
     }
 
-    public void generateLLMPrompt(PlcAnomaly a) {
+    public void generateAsyncLLMPrompt(PlcAnomaly a) {
 
         Executor LLM_EXECUTOR =
                 Executors.newSingleThreadExecutor(r -> {
@@ -262,13 +283,9 @@ public class PlcAnomalyDetectionService {
                     return t;
                 });
 
-
         LLM_EXECUTOR.execute(() -> {
             try {
-                anomalyPromptService.buildPrompt(
-                        getScenarioNominal(a),
-                        a
-                );
+                anomalyPromptService.buildPrompt(a);
             } catch (Exception e) {
                 System.err.println("[LLM] Prompt generation failed for anomaly " + e);
             }

@@ -246,9 +246,25 @@ FORMAT DE SORTIE STRICT
                 "content": (
                     """
                     LANGUE DE SORTIE OBLIGATOIRE : FRANÇAIS UNIQUEMENT.
+
                     INTERDICTION ABSOLUE :
-                    - anglais
-                    TOUTE SORTIE CONTENANT DE L’ANGLAIS EST CONSIDÉRÉE COMME INVALIDE.
+                    - Toute utilisation de mots, phrases ou expressions en anglais.
+                    - Toute sortie partiellement ou totalement en anglais est STRICTEMENT INTERDITE
+                    et sera considérée comme INVALIDE.
+
+                    RÈGLE DE CONFORMITÉ :
+                    - La réponse doit être intégralement rédigée en français.
+                    - Les termes techniques doivent être traduits ou explicités en français.
+                    - Aucun anglicisme, acronyme ou terme non traduit n’est autorisé.
+
+                    UTILISATION DE DOCUMENTATION TECHNIQUE :
+                    - Si la réponse s’appuie sur une documentation technique disponible,
+                    tu DOIS obligatoirement le préciser explicitement sous la forme suivante :
+
+                    « Selon la documentation technique de référence : [nom du document] »
+
+                    Toute réponse ne respectant pas strictement ces règles est considérée comme NON CONFORME.
+
                 """
                  
                 )
