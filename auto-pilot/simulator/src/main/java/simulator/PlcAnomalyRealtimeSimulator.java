@@ -12,7 +12,7 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
-public class PlcRealtimeSimulator {
+public class PlcAnomalyRealtimeSimulator {
 
 
     private final PlcEventRepository plcEventRepository;
@@ -63,6 +63,12 @@ public class PlcRealtimeSimulator {
 
     @Transactional
     public void clearDb() {
+
+        RunnerConstante runnerConstante = runnerConstanteRepository.findAll().stream().findFirst().get();
+        runnerConstante.setLastAnomalyAnalise(0L);
+        runnerConstante.setLastCurrentEvent(0L);
+        runnerConstanteRepository.save(runnerConstante);
+
         plcAnomalyRepository.truncatePlcAnomalies();
         plcEventRepository.truncatePlcEvents();
         partRepository.truncateParts();
@@ -71,12 +77,8 @@ public class PlcRealtimeSimulator {
 
 
     public void runForever() {
-        RunnerConstante runnerConstante = runnerConstanteRepository.findAll().stream().findFirst().get();
-        runnerConstante.setLastAnomalyAnalise(0L);
-        runnerConstante.setLastCurrentEvent(0L);
-        runnerConstanteRepository.save(runnerConstante);
-        clearDb();
 
+        clearDb();
         List<Machine> machines =
                 machineRepository.findByLineIdOrderByIdAsc(1);
 

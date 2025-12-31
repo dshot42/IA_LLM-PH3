@@ -65,7 +65,10 @@ public class LaunchDetector {
         if (currentMax == null) return;
 
         long lastSeen = LAST_EVENT_ID.get();
-        if (currentMax <= lastSeen) return;
+        if (currentMax <= lastSeen) {
+            log.info("No current events to process (lastSeen={}, currentMax={})", lastSeen, currentMax);
+            return;
+        }
 
         List<PlcEvent> newEvents =
                 plcEventRepository.findAllByIdGreaterThanOrderByIdAsc(lastSeen);

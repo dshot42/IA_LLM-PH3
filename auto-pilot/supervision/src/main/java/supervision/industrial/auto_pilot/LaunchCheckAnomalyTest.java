@@ -47,7 +47,7 @@ public class CheckAnomalyRunner {
         System.out.println("Found " + plcAnomalies.size() + " plc anomalies");
         plcAnomalies.forEach(a -> {
             try {
-                anomalyDetectionService.detectAndPersist(a.getPlcEvent());
+                anomalyDetectionService.anomalyDetection(a.getPlcEvent());
                 Thread.sleep(100_000);
             } catch (InterruptedException ex) {
                 throw new RuntimeException(ex);
