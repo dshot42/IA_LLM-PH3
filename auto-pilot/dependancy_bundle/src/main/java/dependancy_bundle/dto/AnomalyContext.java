@@ -53,7 +53,7 @@ public record AnomalyContext(
         double anomalyScore,
 
         // =====================
-        // TRACE CYCLE (OPTIONNEL MAIS PUISSANT)
+        //    STACK FOR PREDICTION
         // =====================
         ReccurenceAnomalyAnalyseDto reccurenceAnomalyAnalyseDto,
 
